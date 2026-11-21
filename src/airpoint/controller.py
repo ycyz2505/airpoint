@@ -35,6 +35,7 @@ class Controller:
         self._frame_index = 0
         self._last_mode = ""
         self._inside = False
+        self._calibrating = threading.Event()
 
     def start(self) -> None:
         with self._lock:
@@ -73,6 +74,17 @@ class Controller:
     def reload(self) -> None:
         self._reload_camera.set()
         self._reset.set()
+
+    def set_calibrating(self, value: bool) -> None:
+        if value:
+            self._calibrating.set()
+            self._reset.set()
+            inject.release_all()
+            self.log("calibration start")
+        else:
+            self._calibrating.clear()
+            self._reset.set()
+            self.log("calibration end")
 
     def _run(self) -> None:
         camera = Camera(self.config, self.log)
@@ -141,6 +153,7 @@ class Controller:
 
             wrist = pose.process(small)
             now = time.time()
+            calibrating = self._calibrating.is_set()
 
             moving_hand = str(self.config.get("pointer.hand", "right"))
             scheme = str(self.config.get("gesture.scheme", "auto"))
@@ -223,7 +236,7 @@ class Controller:
                 last_gesture_seen = now
 
             kind = "none"
-            if inside:
+            if inside and not calibrating:
                 if scheme == "single" and moving_result is not None:
                     kind = (
                         "down"
@@ -239,10 +252,30 @@ class Controller:
 
             screen_w, screen_h = inject.screen_size()
 
-            if point is not None and inside:
+            calibration = self.config.get("pointer.calibration", [])
+            calibration_size = self.config.get(
+                "pointer.calibration_size", []
+            )
+            calibrated = bool(
+                isinstance(calibration, list)
+                and len(calibration) == 9
+                and isinstance(calibration_size, list)
+                and len(calibration_size) == 2
+                and int(calibration_size[0]) == screen_w
+                and int(calibration_size[1]) == screen_h
+            )
+            active_calibration = calibration if calibrated else None
+
+            if point is not None and inside and not calibrating:
                 if mode == "absolute":
                     target = absolute.update(
-                        point[0], point[1], now, box, screen_w, screen_h
+                        point[0],
+                        point[1],
+                        now,
+                        box,
+                        screen_w,
+                        screen_h,
+                        calibration=active_calibration,
                     )
                     if target is not None:
                         inject.set_cursor(target[0], target[1])
@@ -287,27 +320,28 @@ class Controller:
 
             self._inside = inside
 
-            cursor = inject.get_cursor()
-            out = gestures.update(kind, now, cursor)
-            if out.left_click:
-                inject.button("left", True)
-                inject.button("left", False)
-            if out.right_click:
-                inject.button("right", True)
-                inject.button("right", False)
-            if out.left_down:
-                inject.button("left", True)
-            if out.left_up:
-                inject.button("left", False)
-
-            if (
-                gestures.state != "Idle"
-                and kind == "none"
-                and now - last_gesture_seen > 0.3
-            ):
-                cancel = gestures.cancel()
-                if cancel.left_up:
+            if not calibrating:
+                cursor = inject.get_cursor()
+                out = gestures.update(kind, now, cursor)
+                if out.left_click:
+                    inject.button("left", True)
                     inject.button("left", False)
+                if out.right_click:
+                    inject.button("right", True)
+                    inject.button("right", False)
+                if out.left_down:
+                    inject.button("left", True)
+                if out.left_up:
+                    inject.button("left", False)
+
+                if (
+                    gestures.state != "Idle"
+                    and kind == "none"
+                    and now - last_gesture_seen > 0.3
+                ):
+                    cancel = gestures.cancel()
+                    if cancel.left_up:
+                        inject.button("left", False)
 
             elapsed = max(0.5, now - self._window_start)
             fps = self._frames / elapsed
@@ -349,6 +383,11 @@ class Controller:
                         "scheme": scheme,
                         "mode": mode,
                         "inside": inside,
+                        "calibrating": calibrating,
+                        "calibrated": calibrated,
+                        "palm_ok": point is not None,
+                        "palm_x": point[0] if point else 0.0,
+                        "palm_y": point[1] if point else 0.0,
                         "gain": float(
                             self.config.get("pointer.gain_relative", 1.8)
                         ),

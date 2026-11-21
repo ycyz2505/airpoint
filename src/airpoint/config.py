@@ -61,6 +61,8 @@ DEFAULTS = {
         "rest_speed": 0.05,
         "active_on_start": False,
         "box": [],
+        "calibration": [],
+        "calibration_size": [],
     },
     "pose": {
         "model_complexity": 1,

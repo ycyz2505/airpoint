@@ -51,6 +51,8 @@ updates.
 - Absolute "virtual touch" mode: draw a box in the preview; the palm maps to
   the screen inside the box. The same box acts as an active zone in relative
   mode; outside it, the cursor freezes.
+- Five-point calibration for absolute mode: full-screen targets, hold still at
+  each one, and a homography replaces the box affine mapping.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

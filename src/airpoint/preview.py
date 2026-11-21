@@ -7,6 +7,7 @@ import tkinter as tk
 from PIL import Image, ImageTk
 from tkinter import messagebox, ttk
 
+from .calibrate import run_calibration
 from .config import DEFAULTS
 
 
@@ -118,6 +119,12 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     ttk.Button(bar, text="清除框", command=lambda: clear_box()).pack(
         side="left", padx=(0, 6)
     )
+    ttk.Button(bar, text="5 点标定", command=lambda: calibrate()).pack(
+        side="left", padx=(0, 6)
+    )
+    ttk.Button(
+        bar, text="清除标定", command=lambda: clear_calibration()
+    ).pack(side="left", padx=(0, 6))
     ttk.Button(bar, text="保存参数", command=lambda: save()).pack(
         side="left", padx=(0, 6)
     )
@@ -155,6 +162,33 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         messagebox.showinfo(
             "OpticalInputSvc", "已恢复手感默认值，点保存写入。", parent=win
         )
+
+    def calibrate() -> None:
+        if not controller.active:
+            messagebox.showinfo(
+                "OpticalInputSvc", "请先激活鼠标。", parent=win
+            )
+            return
+        if not config.get("pointer.box"):
+            messagebox.showinfo(
+                "OpticalInputSvc",
+                "请先画框；绝对模式需要一个活动区。",
+                parent=win,
+            )
+            return
+        run_calibration(
+            win.master,
+            bus,
+            controller,
+            config,
+            win.winfo_screenwidth(),
+            win.winfo_screenheight(),
+        )
+
+    def clear_calibration() -> None:
+        config.set("pointer.calibration", [])
+        config.set("pointer.calibration_size", [])
+        config.save()
 
     def draw_box() -> None:
         canvas.delete("box")
@@ -250,7 +284,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         if not stats:
             return "未激活 / 无画面"
         return (
-            f"状态：{'激活' if stats.get('active') else '暂停'}    "
+            f"状态：{'激活' if stats.get('active') else '暂停'}"
+            f"{' · 标定中' if stats.get('calibrating') else ''}    "
             f"摄像头：{stats.get('width', 0)}x{stats.get('height', 0)}    "
             f"FPS：{stats.get('fps', 0.0):.1f}    "
             f"手腕：{stats.get('hit', 0.0):.0f}%\n"
@@ -258,7 +293,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"手部：{'就绪' if stats.get('hands') else '未就绪'}    "
             f"方案：{stats.get('scheme', 'single')}    "
             f"模式：{stats.get('mode', 'relative')}    "
-            f"框内：{'是' if stats.get('inside') else '否'}\n"
+            f"框内：{'是' if stats.get('inside') else '否'}    "
+            f"标定：{'已' if stats.get('calibrated') else '无'}\n"
             f"手：{stats.get('hand', 'right')}    "
             f"增益：{stats.get('gain', 0.0):.2f}    "
             f"手腕置信：{stats.get('wrist_conf', 0.0):.2f}    "

@@ -144,6 +144,7 @@ class AbsolutePointer:
         box,
         screen_w: int,
         screen_h: int,
+        calibration=None,
     ):
         fx = self._fx(x, t)
         fy = self._fy(y, t)
@@ -156,6 +157,15 @@ class AbsolutePointer:
 
         if not (x0 <= x <= x1 and y0 <= y <= y1):
             return None
+
+        if calibration is not None and len(calibration) == 9:
+            h = [float(item) for item in calibration]
+            denominator = h[6] * fx + h[7] * fy + h[8]
+            if abs(denominator) < 1e-9:
+                return None
+            u = (h[0] * fx + h[1] * fy + h[2]) / denominator
+            v = (h[3] * fx + h[4] * fy + h[5]) / denominator
+            return u, v
 
         u = (fx - x0) / (x1 - x0)
         v = (fy - y0) / (y1 - y0)
