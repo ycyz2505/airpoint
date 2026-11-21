@@ -31,9 +31,9 @@ downloads the new executable through a list of GitHub mirrors:
 4. direct GitHub
 
 The download is checked against the SHA-256 in the manifest and an Ed25519
-signature before it replaces the running executable. Replacement happens only
-when the app is idle; a failed start rolls back to the previous build. Set
-`OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
+signature, then staged. By default it is applied at the next launch (or on a
+manual exit), not in the middle of a session; a failed start rolls back to the
+previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
 
 ## Build output
 
