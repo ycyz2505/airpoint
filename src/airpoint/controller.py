@@ -10,7 +10,7 @@ import cv2
 from . import inject
 from .capture import Camera
 from .diagnostics import Diagnostics
-from .gestures import GestureEngine
+from .gestures import GestureEngine, TwoHandOpen
 from .hands import HandTracker
 from .paths import log_dir
 from .pointer import AbsolutePointer, RelativePointer, map_point, safe_zone
@@ -61,6 +61,8 @@ class Controller:
         self._hold_progress = 0.0
         self._paused_notice = False
         self._writing = False
+        self._two_hand = TwoHandOpen(config)
+        self._bar_request = 0
         self._diag = Diagnostics(1800)
 
     def start(self) -> None:
@@ -104,6 +106,14 @@ class Controller:
     @property
     def hold_progress(self) -> float:
         return self._hold_progress
+
+    def take_bar_request(self) -> bool:
+        """True once per two-hand request to toggle the control bar."""
+        with self._lock:
+            if not self._bar_request:
+                return False
+            self._bar_request = 0
+            return True
 
     def set_active(self, active: bool) -> None:
         if active:
@@ -353,6 +363,13 @@ class Controller:
             shoulder = pose.shoulder_width()
             pose_conf = wrist[2] if wrist else 0.0
             busy = gestures.state != "Idle"
+            if self._active.is_set() and not calibrating:
+                if self._two_hand.update(pose, now):
+                    with self._lock:
+                        self._bar_request = 1
+                    self.log("two-hand pose: toggle control bar")
+            else:
+                self._two_hand.reset()
             tier_state = self._tier.update(
                 shoulder, self._last_palm_px, drop, pose_conf, busy, now
             )

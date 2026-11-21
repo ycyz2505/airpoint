@@ -44,6 +44,8 @@ class ControlBar:
         self.win = None
         self._toggle = None
         self._status = None
+        self._tier_button = None
+        self._gesture_button = None
         self._seq = -1
 
     def show(self) -> None:
@@ -88,6 +90,10 @@ class ControlBar:
             side="left", padx=2
         )
         _label("模式", self._toggle_mode, frame).pack(side="left", padx=2)
+        self._tier_button = _label("档位", self._cycle_tier, frame)
+        self._tier_button.pack(side="left", padx=2)
+        self._gesture_button = _label("手势", self._cycle_click, frame)
+        self._gesture_button.pack(side="left", padx=2)
         _label("标定", self._recalibrate, frame).pack(side="left", padx=2)
         _label("预览", self._preview, frame).pack(side="left", padx=2)
         _label("设置", self._settings, frame).pack(side="left", padx=2)
@@ -132,6 +138,30 @@ class ControlBar:
         self.config.set("pointer.mode", order[(index + 1) % len(order)])
         self.controller.reload()
 
+    def _cycle_tier(self) -> None:
+        order = ["", "A", "B", "C", "D", "E"]
+        current = str(self.config.get("tier.lock", "")).upper()
+        try:
+            index = order.index(current)
+        except ValueError:
+            index = 0
+        value = order[(index + 1) % len(order)]
+        self.config.set("tier.lock", value)
+        self.config.set("tier.mode", "manual" if value else "auto")
+        self.config.save()
+        self._refresh()
+
+    def _cycle_click(self) -> None:
+        order = ["auto", "pinch", "fist"]
+        current = str(self.config.get("gesture.click", "auto"))
+        try:
+            index = order.index(current)
+        except ValueError:
+            index = 0
+        self.config.set("gesture.click", order[(index + 1) % len(order)])
+        self.config.save()
+        self._refresh()
+
     def _preview(self) -> None:
         from .preview import open_preview
 
@@ -166,6 +196,13 @@ class ControlBar:
         try:
             self._status.configure(text=text, fg=color)
             self._toggle.configure(text="暂停" if active else "激活")
+            lock = str(self.config.get("tier.lock", "")).upper()
+            self._tier_button.configure(text=f"档位{lock}" if lock else "档位")
+            click = str(self.config.get("gesture.click", "auto"))
+            names = {"auto": "自动", "pinch": "捏合", "fist": "握拳"}
+            self._gesture_button.configure(
+                text=f"手势{names.get(click, click)}"
+            )
         except tk.TclError:
             pass
 

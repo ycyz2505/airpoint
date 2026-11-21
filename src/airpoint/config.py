@@ -112,6 +112,8 @@ DEFAULTS = {
         "control_bar": False,
         "box": False,
         "hold_ring": True,
+        "two_hand_bar": True,
+        "two_hand_hold_ms": 1500,
         "magnifier": False,
         "magnifier_size": 220,
         "magnifier_zoom": 2.5,

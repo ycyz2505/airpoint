@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from airpoint.config import Config  # noqa: E402
-from airpoint.gestures import GestureEngine  # noqa: E402
+from airpoint.gestures import GestureEngine, TwoHandOpen  # noqa: E402
 from airpoint.pointer import AbsolutePointer, RelativePointer  # noqa: E402
 from airpoint.tiers import TierEngine  # noqa: E402
 
@@ -114,6 +114,61 @@ class GestureTests(unittest.TestCase):
             self.assertEqual(engine.state, "Dragging")
             out = engine.update("up", 10.2, (160, 100))
             self.assertTrue(out.left_up)
+
+
+class _FakePose:
+    def __init__(self, left, right, shoulder=0.12, shoulder_y=0.5):
+        self._left = left
+        self._right = right
+        self._shoulder = shoulder
+        self._shoulder_y = shoulder_y
+
+    def wrist(self, hand="right"):
+        return self._left if hand == "left" else self._right
+
+    def shoulder_width(self) -> float:
+        return self._shoulder
+
+    def landmark(self, index, min_visibility=0.3):
+        if index == 11:
+            return (0.5 - self._shoulder / 2, self._shoulder_y, 1.0)
+        if index == 12:
+            return (0.5 + self._shoulder / 2, self._shoulder_y, 1.0)
+        return None
+
+
+class TwoHandTests(unittest.TestCase):
+    def test_raised_spread_hands_fire_after_the_hold(self):
+        with TempConfig() as config:
+            config.set("overlay.two_hand_hold_ms", 1500)
+            detector = TwoHandOpen(config)
+            pose = _FakePose((0.2, 0.30), (0.8, 0.30))
+            self.assertFalse(detector.update(pose, 10.0))
+            self.assertFalse(detector.update(pose, 11.0))
+            self.assertTrue(detector.update(pose, 11.6))
+            self.assertFalse(detector.update(pose, 12.5))
+
+    def test_narrow_hands_do_not_fire(self):
+        with TempConfig() as config:
+            detector = TwoHandOpen(config)
+            pose = _FakePose((0.45, 0.30), (0.55, 0.30))
+            for step in range(30):
+                self.assertFalse(detector.update(pose, 10.0 + step * 0.1))
+
+    def test_lowered_hands_do_not_fire(self):
+        with TempConfig() as config:
+            detector = TwoHandOpen(config)
+            pose = _FakePose((0.2, 0.75), (0.8, 0.75))
+            for step in range(30):
+                self.assertFalse(detector.update(pose, 10.0 + step * 0.1))
+
+    def test_disabled_switch_never_fires(self):
+        with TempConfig() as config:
+            config.set("overlay.two_hand_bar", False)
+            detector = TwoHandOpen(config)
+            pose = _FakePose((0.2, 0.30), (0.8, 0.30))
+            for step in range(30):
+                self.assertFalse(detector.update(pose, 10.0 + step * 0.1))
 
 
 class TierTests(unittest.TestCase):

@@ -12,6 +12,58 @@ class GestureOutput:
         self.right_click = False
 
 
+class TwoHandOpen:
+    """Both hands raised and spread for a moment toggles the control bar.
+
+    The tray is unreachable from the back of a classroom, so a deliberate
+    two-hand pose is the way to bring the bar back or put it away.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self._since = 0.0
+        self._armed = True
+
+    def reset(self) -> None:
+        self._since = 0.0
+        self._armed = True
+
+    def update(self, pose, now: float) -> bool:
+        if not bool(self.config.get("overlay.two_hand_bar", True)):
+            self.reset()
+            return False
+        left = pose.wrist("left")
+        right = pose.wrist("right")
+        shoulder = pose.shoulder_width()
+        sl = pose.landmark(11)
+        sr = pose.landmark(12)
+        raised = (
+            left is not None
+            and right is not None
+            and shoulder > 0.0
+            and sl is not None
+            and sr is not None
+            and (left[1] + right[1]) / 2.0 < (sl[1] + sr[1]) / 2.0 - 0.05
+            and abs(left[0] - right[0]) > 2.2 * shoulder
+        )
+        if not raised:
+            self.reset()
+            return False
+        if not self._armed:
+            return False
+        if self._since <= 0.0:
+            self._since = now
+            return False
+        hold = float(self.config.get("overlay.two_hand_hold_ms", 1500)) / 1000.0
+        if hold <= 0.0:
+            hold = 1.5
+        if now - self._since < hold:
+            return False
+        self._armed = False
+        self._since = 0.0
+        return True
+
+
 class GestureEngine:
     def __init__(self, config, log):
         self.config = config

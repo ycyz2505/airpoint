@@ -266,6 +266,25 @@ def main() -> None:
             )
         bar.show()
 
+    def toggle_bar(root) -> None:
+        if bar is not None and bar.win is not None:
+            bar.hide()
+            return
+        show_bar(root)
+
+    def start_bar_poll(root) -> None:
+        def poll() -> None:
+            if controller.take_bar_request():
+                toggle_bar(root)
+            try:
+                root.after(200, poll)
+            except tk.TclError:
+                pass
+
+        poll()
+
+    ui.post(start_bar_poll)
+
     def on_hotkey_mode() -> None:
         mouse_pause.cancel()
         on_mode()

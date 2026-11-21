@@ -211,6 +211,8 @@ SECTIONS = [
             ("overlay.control_bar", "控制条", "bool"),
             ("overlay.box", "屏幕上显示映射框", "bool"),
             ("overlay.hold_ring", "长按进度环", "bool"),
+            ("overlay.two_hand_bar", "双手张开呼出控制条", "bool"),
+            ("overlay.two_hand_hold_ms", "双手张开时长（ms）", "int"),
             ("overlay.magnifier", "书写放大镜", "bool"),
             ("overlay.magnifier_size", "放大镜尺寸（px）", "int"),
             ("overlay.magnifier_zoom", "放大倍数", "float"),
