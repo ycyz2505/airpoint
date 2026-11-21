@@ -128,6 +128,9 @@ automatic updates.
 - Two-hand toggle: both hands raised and spread for 1.5 s shows or hides the
   control bar, since the tray is out of reach from the back of the room
   (**双手张开呼出控制条**).
+- Big cursor: **大光标** raises the Windows cursor size for the session
+  (1–8x) so it is visible from the back row, and the previous size is put back
+  on exit. The cursor is never hidden or redrawn.
 
 ## Settings
 

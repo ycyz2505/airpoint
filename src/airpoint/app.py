@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 
+from . import cursorsize
 from . import startup
 from . import updater
 from .config import Config
@@ -134,6 +135,20 @@ def main() -> None:
 
     ui = UiThread()
     ui.start()
+
+    original_cursor = cursorsize.current()
+
+    def apply_cursor_size() -> None:
+        if bool(config.get("overlay.big_cursor", False)):
+            cursorsize.set_size(int(config.get("overlay.big_cursor_size", 3)))
+        elif original_cursor:
+            cursorsize.set_size(original_cursor)
+
+    ui.post(lambda root: apply_cursor_size())
+
+    def restore_cursor() -> None:
+        if original_cursor:
+            cursorsize.set_size(original_cursor)
 
     magnifier = None
 
@@ -289,6 +304,10 @@ def main() -> None:
         mouse_pause.cancel()
         on_mode()
 
+    def on_saved() -> None:
+        controller.reload()
+        ui.post(lambda root: apply_cursor_size())
+
     def on_settings() -> None:
         ui.post(
             lambda root: locked(
@@ -298,7 +317,7 @@ def main() -> None:
                     config,
                     security,
                     __version__,
-                    on_saved=controller.reload,
+                    on_saved=on_saved,
                 ),
             )
         )
@@ -321,6 +340,7 @@ def main() -> None:
             hold_ring.stop()
         if hud is not None:
             hud.stop()
+        restore_cursor()
         controller.stop()
         if icon is not None:
             icon.stop()

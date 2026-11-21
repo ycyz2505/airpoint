@@ -217,6 +217,8 @@ SECTIONS = [
             ("overlay.magnifier_size", "放大镜尺寸（px）", "int"),
             ("overlay.magnifier_zoom", "放大倍数", "float"),
             ("overlay.presentation", "演示模式（边缘禁点）", "bool"),
+            ("overlay.big_cursor", "大光标（退出时还原）", "bool"),
+            ("overlay.big_cursor_size", "大光标倍数", "int"),
         ],
     ),
     (
