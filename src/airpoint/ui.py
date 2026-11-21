@@ -94,7 +94,6 @@ SECTIONS = [
         "更新",
         [
             ("update.enabled", "自动更新", "bool"),
-            ("update.channel", "通道", "choice", ["stable"]),
             ("update.interval_hours", "检查间隔（小时）", "int"),
             (
                 "update.apply_when",
@@ -108,7 +107,6 @@ SECTIONS = [
     (
         "启动",
         [
-            ("startup.silent", "静默启动", "bool"),
             ("startup.auto_run", "开机自动运行", "bool"),
         ],
     ),

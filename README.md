@@ -42,7 +42,8 @@ automatic updates.
 
 ## Current build
 
-- Camera capture at 1080p or 4K; automatic device and backend selection.
+- Camera capture at the size picked in settings (falling back to 4K and then
+  1080p if the device refuses it); automatic device and backend selection.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,

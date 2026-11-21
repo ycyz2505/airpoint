@@ -649,6 +649,34 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(len(diag), 3)
 
 
+class CaptureTargetTests(unittest.TestCase):
+    def test_default_tries_4k_then_1080p(self):
+        from airpoint.capture import targets_for
+
+        with TempConfig() as config:
+            self.assertEqual(
+                targets_for(config), [(3840, 2160), (1920, 1080)]
+            )
+
+    def test_explicit_size_comes_first(self):
+        from airpoint.capture import targets_for
+
+        with TempConfig() as config:
+            config.set("camera.width", 2560)
+            config.set("camera.height", 1440)
+            self.assertEqual(
+                targets_for(config),
+                [(2560, 1440), (3840, 2160), (1920, 1080)],
+            )
+
+    def test_no_4k_when_disabled(self):
+        from airpoint.capture import targets_for
+
+        with TempConfig() as config:
+            config.set("camera.prefer_4k", False)
+            self.assertEqual(targets_for(config), [(1920, 1080)])
+
+
 class UpdateTests(unittest.TestCase):
     def test_version_compare(self):
         from airpoint.updater import _is_newer

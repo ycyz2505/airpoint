@@ -12,7 +12,6 @@ DEFAULTS = {
         "current": "",
     },
     "startup": {
-        "silent": True,
         "auto_run": False,
     },
     "wizard": {
@@ -27,7 +26,6 @@ DEFAULTS = {
     },
     "update": {
         "enabled": True,
-        "channel": "stable",
         "check_on_start": True,
         "interval_hours": 6,
         "accelerators": [

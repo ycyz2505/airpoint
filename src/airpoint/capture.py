@@ -5,6 +5,27 @@ import time
 import cv2
 
 
+def targets_for(config) -> list[tuple[int, int]]:
+    """Resolutions to try, best first."""
+    try:
+        wanted_w = int(config.get("camera.width", 0) or 0)
+        wanted_h = int(config.get("camera.height", 0) or 0)
+    except (TypeError, ValueError):
+        wanted_w = wanted_h = 0
+    targets = []
+    explicit = (
+        wanted_w > 0
+        and wanted_h > 0
+        and (wanted_w, wanted_h) != (1920, 1080)
+    )
+    if explicit:
+        targets.append((wanted_w, wanted_h))
+    if bool(config.get("camera.prefer_4k", True)):
+        targets.append((3840, 2160))
+    targets.append((1920, 1080))
+    return targets
+
+
 class Camera:
     def __init__(self, config, log):
         self.config = config
@@ -32,8 +53,7 @@ class Camera:
             except ValueError:
                 indices = [0]
 
-        prefer_4k = bool(self.config.get("camera.prefer_4k", True))
-        targets = [(3840, 2160), (1920, 1080)] if prefer_4k else [(1920, 1080)]
+        targets = targets_for(self.config)
         fps = int(self.config.get("camera.fps", 30))
 
         order = {
