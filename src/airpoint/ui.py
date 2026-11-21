@@ -102,6 +102,7 @@ SECTIONS = [
                 ["startup", "next_start", "manual"],
             ),
             ("update.allow_downgrade", "允许降级", "bool"),
+            ("update.check_on_start", "启动时检查", "bool"),
         ],
     ),
     (
@@ -147,6 +148,20 @@ SECTIONS = [
         ],
     ),
     (
+        "档位阈值",
+        [
+            ("tier.shoulder_a", "A 档肩宽占比", "float"),
+            ("tier.shoulder_b", "B 档肩宽占比", "float"),
+            ("tier.shoulder_c", "C 档肩宽占比", "float"),
+            ("tier.shoulder_d", "D 档肩宽占比", "float"),
+            ("tier.palm_good", "手掌良好（px）", "float"),
+            ("tier.palm_ok", "手掌可用（px）", "float"),
+            ("tier.drop_bad", "丢帧上限", "float"),
+            ("tier.downgrade_ms", "降档等待（ms）", "int"),
+            ("tier.upgrade_ms", "升档等待（ms）", "int"),
+        ],
+    ),
+    (
         "指针",
         [
             (
@@ -171,12 +186,16 @@ SECTIONS = [
             ("pointer.max_step_px", "单帧最大位移（px）", "float"),
             ("pointer.mincutoff", "平滑（越小越稳）", "float"),
             ("pointer.beta", "跟随（越大越快）", "float"),
-            (
-                "pose.model_complexity",
-                "姿态模型",
-                "choice",
-                ["0", "1", "2"],
-            ),
+            ("pointer.rest_speed", "静止阈值", "float"),
+        ],
+    ),
+    (
+        "感知",
+        [
+            ("pose.model_complexity", "姿态模型", "choice", ["0", "1", "2"]),
+            ("pose.min_confidence", "姿态置信度", "float"),
+            ("hands.model_complexity", "手部模型", "choice", ["0", "1"]),
+            ("hands.min_confidence", "手部置信度", "float"),
         ],
     ),
     (
@@ -197,7 +216,6 @@ SECTIONS = [
             ("gesture.right_click_ms", "右键长按（ms）", "int"),
             ("gesture.drag_threshold_px", "拖拽阈值（px）", "int"),
             ("gesture.double_click_ms", "双击间隔（ms）", "int"),
-            ("hands.model_complexity", "手部模型", "choice", ["0", "1"]),
             ("gesture.pinch_enter", "捏合进入", "float"),
             ("gesture.pinch_exit", "捏合退出", "float"),
             ("gesture.fist_enter", "握拳进入", "float"),
@@ -275,7 +293,7 @@ def open_settings(
 
     def reopen() -> None:
         win.destroy()
-        open_settings(root, config, security, version, on_saved)
+        open_settings(root, config, security, version, on_saved, controller)
 
     _build_profiles(notebook, config, on_saved, reopen)
 
@@ -321,7 +339,7 @@ def open_settings(
             config.set("security", security_data)
             config.save()
             win.destroy()
-            open_settings(root, config, security, version, on_saved)
+            open_settings(root, config, security, version, on_saved, controller)
 
     ttk.Button(bar, text="保存", command=save).pack(side="right")
     ttk.Button(bar, text="取消", command=win.destroy).pack(side="right", padx=6)

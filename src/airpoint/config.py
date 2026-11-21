@@ -149,7 +149,12 @@ class Config:
         self.path = path or (data_dir() / "config.json")
         self.data = copy.deepcopy(DEFAULTS)
         self._stamp = self._stat()
+        self._watchers = []
         self.load()
+
+    def watch(self, callback) -> None:
+        """Run ``callback`` after a successful reload from disk."""
+        self._watchers.append(callback)
 
     def _stat(self):
         try:
@@ -184,6 +189,11 @@ class Config:
         merged = copy.deepcopy(self.data)
         self._merge(merged, raw)
         self.data = merged
+        for callback in self._watchers:
+            try:
+                callback()
+            except Exception:
+                pass
         return True
 
     def _merge(self, base: dict, incoming: dict) -> None:

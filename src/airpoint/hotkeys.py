@@ -27,6 +27,17 @@ MOD_CONTROL = 0x0002
 MOD_SHIFT = 0x0004
 MOD_WIN = 0x0008
 WM_HOTKEY = 0x0312
+WM_APP_REBIND = 0x8000 + 7
+
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel32.GetCurrentThreadId.restype = wintypes.DWORD
+user32.PostThreadMessageW.argtypes = [
+    wintypes.DWORD,
+    wintypes.UINT,
+    wintypes.WPARAM,
+    wintypes.LPARAM,
+]
+user32.PostThreadMessageW.restype = wintypes.BOOL
 
 VK = {
     "esc": 0x1B,
@@ -77,6 +88,7 @@ class Hotkeys:
         self.on_emergency = on_emergency
         self.on_mode = on_mode
         self.on_bar = on_bar
+        self._thread_id = 0
         self._thread = threading.Thread(
             target=self._run, daemon=True, name="airpoint-hotkeys"
         )
@@ -84,8 +96,16 @@ class Hotkeys:
     def start(self) -> None:
         self._thread.start()
 
-    def _run(self) -> None:
-        bindings = []
+    def rebind(self) -> None:
+        """Ask the message thread to re-read the hotkey settings."""
+        thread_id = self._thread_id
+        if thread_id:
+            user32.PostThreadMessageW(thread_id, WM_APP_REBIND, 0, 0)
+
+    def _bind(self, bindings) -> list:
+        for ident, _ in bindings:
+            user32.UnregisterHotKey(None, ident)
+        bound = []
         entries = [
             (1, "hotkey.toggle_active", self.on_toggle),
             (2, "hotkey.emergency_stop", self.on_emergency),
@@ -103,14 +123,19 @@ class Hotkeys:
                 error = ctypes.get_last_error()
                 self.log(f"hotkey register failed: {key} (win32 {error})")
                 continue
-            bindings.append((ident, callback))
+            bound.append((ident, callback))
             self.log(f"hotkey registered: {key}")
+        return bound
 
-        if not bindings:
-            return
+    def _run(self) -> None:
+        self._thread_id = kernel32.GetCurrentThreadId()
+        bindings = self._bind([])
 
         message = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(message), None, 0, 0) != 0:
+            if message.message == WM_APP_REBIND:
+                bindings = self._bind(bindings)
+                continue
             if message.message != WM_HOTKEY:
                 continue
             for ident, callback in bindings:

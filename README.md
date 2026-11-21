@@ -160,10 +160,14 @@ automatic updates.
 ## Settings
 
 The tray menu's **设置…** and **退出** require the management password set on
-first run. Settings cover update, startup, performance, camera, tiers,
-pointer, gestures, overlay, hotkeys, recording, and about. The password is
-stored as a PBKDF2-HMAC-SHA256 hash; five failures lock the menu for 30
-seconds.
+first run. Settings are a tabbed window: update, startup, performance, camera,
+tiers, tier thresholds (shoulder-width ratios, palm size, drop rate,
+hysteresis), pointer, perception (pose and hand model complexity and
+confidence), gestures, overlay, hotkeys, recording, plus separate tabs for the
+password, seat profiles, and about. Saving applies immediately — the frame
+loop reloads the config and the hotkeys re-register without a restart. The
+password is stored as a PBKDF2-HMAC-SHA256 hash; five failures lock the menu
+for 30 seconds.
 
 ## Build
 

@@ -306,6 +306,7 @@ def main() -> None:
 
     def on_saved() -> None:
         controller.reload()
+        hotkeys.rebind()
         ui.post(lambda root: apply_cursor_size())
 
     def on_settings() -> None:
@@ -444,6 +445,7 @@ def main() -> None:
         on_bar=on_bar,
     )
     hotkeys.start()
+    config.watch(hotkeys.rebind)
 
     if bool(config.get("overlay.control_bar", False)):
         ui.post(lambda root: show_bar(root))

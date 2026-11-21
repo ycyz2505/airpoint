@@ -736,6 +736,60 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(_is_newer("0.9.9", "0.10.0"))
 
 
+class HotkeyTests(unittest.TestCase):
+    def test_parse_modifiers_and_key(self):
+        from airpoint import hotkeys
+
+        modifiers, key = hotkeys.parse("ctrl+alt+f12")
+        self.assertEqual(modifiers, hotkeys.MOD_CONTROL | hotkeys.MOD_ALT)
+        self.assertEqual(key, hotkeys.VK["f12"])
+
+    def test_parse_single_letter_and_unknown(self):
+        from airpoint import hotkeys
+
+        self.assertEqual(hotkeys.parse("k"), (0, ord("K")))
+        self.assertEqual(hotkeys.parse("ctrl+nonsense"), (hotkeys.MOD_CONTROL, None))
+        self.assertEqual(hotkeys.parse(""), (0, None))
+
+
+class SettingsSchemaTests(unittest.TestCase):
+    def test_every_row_points_at_a_real_key(self):
+        from airpoint import ui
+        from airpoint.config import DEFAULTS
+
+        def resolve(dotted):
+            node = DEFAULTS
+            for part in dotted.split("."):
+                if not isinstance(node, dict) or part not in node:
+                    return False
+                node = node[part]
+            return True
+
+        for title, fields in ui.SECTIONS:
+            for field in fields:
+                key = field[0]
+                if key.startswith("__"):
+                    continue
+                self.assertTrue(resolve(key), f"{title}: {key} 不在默认配置里")
+                self.assertIn(field[2], ("bool", "int", "float", "str",
+                                         "choice", "action"))
+
+    def test_choices_match_the_default(self):
+        from airpoint import ui
+        from airpoint.config import DEFAULTS
+
+        for _, fields in ui.SECTIONS:
+            for field in fields:
+                if field[2] != "choice":
+                    continue
+                key, options = field[0], field[3]
+                node = DEFAULTS
+                for part in key.split("."):
+                    node = node.get(part) if isinstance(node, dict) else None
+                self.assertIn(str(node), [str(item) for item in options],
+                              f"{key} 默认值不在选项里")
+
+
 class ConfigTests(unittest.TestCase):
     def test_hot_reload_picks_up_external_edit(self):
         with TempConfig() as config:
@@ -752,6 +806,19 @@ class ConfigTests(unittest.TestCase):
             # Untouched keys keep their previous value, not the default.
             self.assertEqual(config.get("camera.device"), "auto")
             self.assertFalse(config.reload_if_changed())
+
+    def test_hot_reload_notifies_watchers(self):
+        with TempConfig() as config:
+            calls = []
+            config.watch(lambda: calls.append(1))
+            config.path.write_text(
+                json.dumps({"pointer": {"hand": "left"}}), encoding="utf-8"
+            )
+            os.utime(config.path, None)
+            self.assertTrue(config.reload_if_changed())
+            self.assertEqual(calls, [1])
+            self.assertFalse(config.reload_if_changed())
+            self.assertEqual(calls, [1])
 
     def test_hot_reload_survives_a_broken_file(self):
         with TempConfig() as config:
