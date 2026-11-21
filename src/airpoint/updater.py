@@ -12,7 +12,6 @@ import urllib.request
 from pathlib import Path
 
 from .paths import exe_path, log_dir, updates_dir
-from .update_pubkey import PUBLIC_KEY_B64
 from .version import __version__
 
 REPO = "ycyz2505/airpoint"
@@ -128,32 +127,6 @@ def _version_tuple(value: str):
 
 def _is_newer(remote: str, current: str) -> bool:
     return _version_tuple(remote) > _version_tuple(current)
-
-
-def _canonical(entry: dict) -> bytes:
-    return json.dumps(
-        entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-
-
-def _verify_signature(entry: dict, signature: str, required: bool = True) -> bool:
-    if not PUBLIC_KEY_B64:
-        # Nothing to verify against yet; the manifest is trusted by its sha256.
-        return True
-    if not signature:
-        return not required
-    try:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PublicKey,
-        )
-
-        public_key = Ed25519PublicKey.from_public_bytes(
-            base64.b64decode(PUBLIC_KEY_B64)
-        )
-        public_key.verify(base64.b64decode(signature), _canonical(entry))
-        return True
-    except Exception:
-        return False
 
 
 def _fetch_to_file(
@@ -303,13 +276,11 @@ def check_and_update(
         log("update disabled by OPTICALINPUT_NO_UPDATE")
         return
     accelerators = None
-    required = True
     allow_downgrade = False
     if config is not None:
         raw = config.get("update.accelerators", None)
         if isinstance(raw, list) and raw:
             accelerators = [str(item) for item in raw]
-        required = bool(config.get("update.require_signature", True))
         allow_downgrade = bool(config.get("update.allow_downgrade", False))
     if delay:
         time.sleep(delay)
@@ -324,11 +295,6 @@ def check_and_update(
         newer = _is_newer(remote, __version__)
         if not newer and (remote == __version__ or not allow_downgrade):
             log(f"up to date ({remote})")
-            return
-        if not _verify_signature(
-            entry, str(manifest.get("signature") or ""), required
-        ):
-            log("signature invalid; refusing update")
             return
         target = exe_path()
         part = _download(entry, log, target, accelerators)

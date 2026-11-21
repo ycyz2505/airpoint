@@ -183,48 +183,6 @@ class TierTests(unittest.TestCase):
 
 
 class UpdateTests(unittest.TestCase):
-    def test_unsigned_manifest_is_rejected_once_keyed(self):
-        from airpoint import updater
-
-        old = updater.PUBLIC_KEY_B64
-        updater.PUBLIC_KEY_B64 = "BSgEDd2wGc1y9MgfBBbc75gvmm4nEFTTcldS5HXajTo="
-        try:
-            self.assertFalse(updater._verify_signature({"version": "1"}, ""))
-        finally:
-            updater.PUBLIC_KEY_B64 = old
-
-    def test_signature_roundtrip(self):
-        try:
-            from cryptography.hazmat.primitives import serialization
-            from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-                Ed25519PrivateKey,
-            )
-        except ImportError:
-            self.skipTest("cryptography not installed")
-
-        import base64
-
-        from airpoint import updater
-
-        key = Ed25519PrivateKey.generate()
-        public = key.public_key().public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-        entry = {"version": "1.2.3", "sha256": "abc", "size": 1}
-        signature = base64.b64encode(
-            key.sign(updater._canonical(entry))
-        ).decode("ascii")
-
-        old = updater.PUBLIC_KEY_B64
-        updater.PUBLIC_KEY_B64 = base64.b64encode(public).decode("ascii")
-        try:
-            self.assertTrue(updater._verify_signature(entry, signature))
-            tampered = dict(entry, sha256="def")
-            self.assertFalse(updater._verify_signature(tampered, signature))
-        finally:
-            updater.PUBLIC_KEY_B64 = old
-
     def test_version_compare(self):
         from airpoint.updater import _is_newer
 

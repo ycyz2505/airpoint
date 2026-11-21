@@ -38,23 +38,12 @@ jobs:
           "value=$($v.Trim())" >> $env:GITHUB_OUTPUT
 
       - name: Manifest
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        shell: pwsh
-        run: |
-          python tools/make_manifest.py `
-            --exe dist/OpticalInputSvc.exe `
-            --version ${{ steps.version.outputs.value }} `
-            --repo ${{ github.repository }} `
-            --out manifest.json
-          $key = python -c "import sys; sys.path.insert(0,'src'); from airpoint.update_pubkey import PUBLIC_KEY_B64; print(PUBLIC_KEY_B64)"
-          if ($key.Trim() -ne "") {
-            $signed = python -c "import json; print(json.load(open('manifest.json'))['signature'])"
-            if ($signed.Trim() -eq "") {
-              Write-Error "A public key is compiled in, so the manifest must be signed."
-              exit 1
-            }
-          }
+        run: >
+          python tools/make_manifest.py
+          --exe dist/OpticalInputSvc.exe
+          --version ${{ steps.version.outputs.value }}
+          --repo ${{ github.repository }}
+          --out manifest.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

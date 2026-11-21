@@ -31,7 +31,6 @@ DEFAULTS = {
             "https://ghproxy.net/",
             "",
         ],
-        "require_signature": True,
         "allow_downgrade": False,
         "apply_when": "startup",
     },

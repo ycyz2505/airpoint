@@ -31,18 +31,11 @@ downloads the new executable through a list of GitHub mirrors:
 3. `https://ghproxy.net/`
 4. direct GitHub
 
-The download is checked against the SHA-256 in the manifest and an Ed25519
-signature, then the app restarts itself to apply it. A failed start rolls back
-to the previous build. `update.apply_when` chooses between installing at
-startup, staging until the next start, or only on request.
-`update.require_signature` decides whether an unsigned manifest is accepted.
-Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
-
-The signing key is generated once with `python tools/make_key.py`; the private
-half lives only in the `UPDATE_SIGNING_KEY` repository secret and the public
-half in `src/airpoint/update_pubkey.py`. The build fails if a public key is
-compiled in but the manifest came out unsigned, so a key rotation cannot
-silently produce unverifiable releases.
+The download is checked against the SHA-256 and size in the manifest, then the
+app restarts itself to apply it. A failed start rolls back to the previous
+build. `update.apply_when` chooses between installing at startup, staging until
+the next start, or only on request. Set `OPTICALINPUT_NO_UPDATE=1` to disable
+automatic updates.
 
 ## Current build
 

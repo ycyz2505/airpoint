@@ -4,18 +4,10 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
-
-
-def canonical(obj) -> bytes:
-    return json.dumps(
-        obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
 
 
 def main() -> int:
@@ -45,30 +37,16 @@ def main() -> int:
         "notes": args.notes,
     }
 
-    signature = ""
-    key_b64 = os.environ.get("UPDATE_SIGNING_KEY", "").strip()
-    if key_b64:
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PrivateKey,
-        )
-
-        key = Ed25519PrivateKey.from_private_bytes(base64.b64decode(key_b64))
-        signature = base64.b64encode(key.sign(canonical(entry))).decode("ascii")
-
     manifest = {
         "schema": 1,
         "channel": "stable",
         "airpoint": entry,
-        "signature": signature,
     }
     Path(args.out).write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(
-        f"wrote {args.out}: {entry['version']} "
-        f"{entry['sha256']} signature={'yes' if signature else 'no'}"
-    )
+    print(f"wrote {args.out}: {entry['version']} {entry['sha256']}")
     return 0
 
 

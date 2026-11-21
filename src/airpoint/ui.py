@@ -102,7 +102,6 @@ SECTIONS = [
                 "choice",
                 ["startup", "next_start", "manual"],
             ),
-            ("update.require_signature", "要求签名", "bool"),
             ("update.allow_downgrade", "允许降级", "bool"),
         ],
     ),

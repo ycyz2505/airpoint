@@ -11,7 +11,6 @@ a = Analysis(
     datas=mp_datas,
     hiddenimports=[
         'pystray._win32',
-        'cryptography.hazmat.primitives.asymmetric.ed25519',
         'PIL.ImageTk',
         'PIL._tkinter_finder',
         *mp_hidden,
