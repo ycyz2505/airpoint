@@ -12,6 +12,7 @@ from .hotkeys import Hotkeys
 from .logging_util import make_logger
 from .paths import data_dir, log_dir, updates_dir
 from .preview import PreviewBus, open_preview
+from .profiles import ProfileStore
 from .security import Security
 from .tray import create_icon
 from .ui import UiThread, ask_new_password, ask_password, open_settings, show_error
@@ -55,6 +56,7 @@ def main() -> None:
     log_dir()
     updates_dir()
     config = Config()
+    ProfileStore(config).load_last()
     security = Security(config)
     log = make_logger("app")
     log(f"start {__version__}")

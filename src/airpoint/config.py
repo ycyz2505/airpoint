@@ -8,6 +8,9 @@ from .paths import data_dir
 
 DEFAULTS = {
     "schema_version": 1,
+    "profile": {
+        "current": "",
+    },
     "startup": {
         "silent": True,
         "first_run_wizard": True,

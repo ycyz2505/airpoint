@@ -57,6 +57,8 @@ updates.
   with downgrade/upgrade hysteresis. Near picks absolute + single hand; far
   picks relative + two hands and drops hand gestures when the hand is too
   small. Manual lock and advisory-only mode are available.
+- Seat profiles: save and load the box, five-point calibration, feel settings,
+  tier lock, gestures, and camera settings. The last profile loads at startup.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

@@ -4,12 +4,14 @@ import copy
 import os
 import queue
 import threading
+import time
 
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from .config import DEFAULTS
 from .paths import data_dir, log_dir
+from .profiles import ProfileStore
 
 
 class UiThread:
@@ -235,6 +237,12 @@ def open_settings(root, config, security, version: str, on_saved=None) -> None:
     _build_security(notebook, config, security, bindings)
     _build_about(notebook, version)
 
+    def reopen() -> None:
+        win.destroy()
+        open_settings(root, config, security, version, on_saved)
+
+    _build_profiles(notebook, config, on_saved, reopen)
+
     bar = ttk.Frame(win)
     bar.pack(fill="x", padx=10, pady=(0, 10))
 
@@ -382,3 +390,113 @@ def _build_about(notebook, version: str) -> None:
     ttk.Button(frame, text="打开数据目录", command=open_data).grid(
         row=3, column=0, sticky="w", pady=(16, 0)
     )
+
+
+def _build_profiles(notebook, config, on_saved, reopen) -> None:
+    frame = ttk.Frame(notebook, padding=12)
+    notebook.add(frame, text="档案")
+
+    listbox = tk.Listbox(frame, height=10, exportselection=False)
+    listbox.grid(row=0, column=0, columnspan=4, sticky="nsew", pady=(0, 8))
+    frame.rowconfigure(0, weight=1)
+    frame.columnconfigure(0, weight=1)
+
+    store = ProfileStore(config)
+
+    def refresh() -> None:
+        listbox.delete(0, tk.END)
+        for name in store.list():
+            listbox.insert(tk.END, name)
+
+    def selected():
+        selection = listbox.curselection()
+        if not selection:
+            return None
+        return listbox.get(selection[0])
+
+    def save_current() -> None:
+        name = simpledialog.askstring(
+            "保存档案",
+            "档案名：",
+            initialvalue=time.strftime("座位_%Y%m%d_%H%M"),
+            parent=frame,
+        )
+        if not name or not name.strip():
+            return
+        try:
+            store.save(name.strip())
+        except OSError as exc:
+            messagebox.showerror(
+                "OpticalInputSvc", f"保存失败：{exc}", parent=frame
+            )
+            return
+        refresh()
+        messagebox.showinfo(
+            "OpticalInputSvc", "档案已保存。", parent=frame
+        )
+
+    def load_selected() -> None:
+        name = selected()
+        if not name:
+            return
+        try:
+            store.load(name)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "OpticalInputSvc", f"载入失败：{exc}", parent=frame
+            )
+            return
+        if on_saved is not None:
+            on_saved()
+        reopen()
+
+    def delete_selected() -> None:
+        name = selected()
+        if not name:
+            return
+        if messagebox.askyesno(
+            "OpticalInputSvc", f"删除档案 {name}？", parent=frame
+        ):
+            store.delete(name)
+            refresh()
+
+    def rename_selected() -> None:
+        name = selected()
+        if not name:
+            return
+        new = simpledialog.askstring(
+            "重命名档案", "新名称：", initialvalue=name, parent=frame
+        )
+        if not new or not new.strip() or new.strip() == name:
+            return
+        try:
+            store.rename(name, new.strip())
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(
+                "OpticalInputSvc", f"重命名失败：{exc}", parent=frame
+            )
+            return
+        refresh()
+
+    ttk.Button(frame, text="保存当前…", command=save_current).grid(
+        row=1, column=0, sticky="w"
+    )
+    ttk.Button(frame, text="载入", command=load_selected).grid(
+        row=1, column=1, sticky="w", padx=6
+    )
+    ttk.Button(frame, text="重命名", command=rename_selected).grid(
+        row=1, column=2, sticky="w"
+    )
+    ttk.Button(frame, text="删除", command=delete_selected).grid(
+        row=1, column=3, sticky="w", padx=(6, 0)
+    )
+    ttk.Label(
+        frame,
+        text=(
+            "档案保存框、5 点标定、指针手感、档位、手势和摄像头设置。"
+            "保存前请先点“保存”写入当前设置。"
+        ),
+        wraplength=620,
+    ).grid(row=2, column=0, columnspan=4, sticky="w", pady=(12, 0))
+
+    refresh()
