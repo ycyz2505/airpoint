@@ -13,6 +13,19 @@ HAND_CONNECTIONS = (
     (0, 17),
 )
 
+# At 4K the wrist crop can reach 860 px a side, but the model works on 224
+# internally, so everything past this is wasted decode. Landmarks are
+# normalised within the crop, so shrinking it does not move them.
+CROP_MAX = 640
+
+
+def crop_scale(width: int, height: int) -> float:
+    """Factor that keeps the crop's longer side within CROP_MAX."""
+    longest = max(int(width), int(height))
+    if longest <= CROP_MAX:
+        return 1.0
+    return CROP_MAX / float(longest)
+
 
 class HandTracker:
     def __init__(self, config, log):
@@ -101,6 +114,16 @@ class HandTracker:
         crop = frame[y0:y1, x0:x1]
         if crop.size == 0:
             return None
+        scale = crop_scale(x1 - x0, y1 - y0)
+        if scale < 1.0:
+            crop = cv2.resize(
+                crop,
+                (
+                    max(32, int((x1 - x0) * scale)),
+                    max(32, int((y1 - y0) * scale)),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
 
         rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
         rgb.flags.writeable = False

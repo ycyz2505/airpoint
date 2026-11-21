@@ -44,6 +44,8 @@ automatic updates.
 
 - Camera capture at the size picked in settings (falling back to 4K and then
   1080p if the device refuses it); automatic device and backend selection.
+  The hand crop is capped at 640 px a side, since the model works at 224
+  internally and a 4K crop would only waste decode time.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
@@ -81,7 +83,8 @@ automatic updates.
   tuned without the classroom. The packaged executable does the same with
   `OpticalInputSvc.exe --replay clip.avi`.
 - Handwriting mode: while the button is held the cursor is filtered harder so
-  strokes drawn in the Seewo whiteboard come out as lines instead of jitter.
+  strokes drawn in the Seewo whiteboard come out as lines instead of jitter,
+  and a minimum step keeps sub-pixel drift from becoming a wobbly stroke.
 - Control bar: a small always-on-top bar with activate, click, mode, preview,
   and settings, reachable by the air cursor at six metres.
 - Performance governor: six levels from full quality down to pause, chosen

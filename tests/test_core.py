@@ -610,6 +610,51 @@ class MagnifierTests(unittest.TestCase):
         self.assertGreaterEqual(y, 0)
 
 
+class CropScaleTests(unittest.TestCase):
+    def test_small_crop_is_left_alone(self):
+        from airpoint.hands import crop_scale
+
+        self.assertEqual(crop_scale(320, 320), 1.0)
+        self.assertEqual(crop_scale(640, 200), 1.0)
+
+    def test_four_k_crop_is_shrunk_to_the_long_side(self):
+        from airpoint.hands import CROP_MAX, crop_scale
+
+        scale = crop_scale(864, 864)
+        self.assertLess(scale, 1.0)
+        self.assertAlmostEqual(864 * scale, CROP_MAX, places=6)
+        # Aspect is preserved: both sides shrink by the same factor.
+        self.assertAlmostEqual(400 * scale, 400 * CROP_MAX / 864.0, places=6)
+
+
+class StrokeSmootherTests(unittest.TestCase):
+    def _smoother(self, gate):
+        from airpoint.writing import StrokeSmoother
+
+        with TempConfig() as config:
+            config.set("pointer.write_smoothing", 1.0)
+            config.set("pointer.write_min_step_px", gate)
+            return StrokeSmoother(config)
+
+    def test_jitter_under_the_gate_is_held(self):
+        smoother = self._smoother(4.0)
+        self.assertEqual(smoother.update(500, 400, True), (500, 400))
+        self.assertEqual(smoother.update(501, 401, True), (500, 400))
+        self.assertEqual(smoother.update(502, 400, True), (500, 400))
+
+    def test_real_movement_passes_the_gate(self):
+        smoother = self._smoother(4.0)
+        smoother.update(500, 400, True)
+        self.assertEqual(smoother.update(520, 400, True), (520, 400))
+
+    def test_release_resets_the_held_point(self):
+        smoother = self._smoother(4.0)
+        smoother.update(500, 400, True)
+        smoother.update(501, 400, True)
+        smoother.update(0, 0, False)
+        self.assertEqual(smoother.update(900, 700, True), (900, 700))
+
+
 class SafeZoneTests(unittest.TestCase):
     def test_edges_are_blocked(self):
         from airpoint.pointer import safe_zone
