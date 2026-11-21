@@ -60,6 +60,7 @@ DEFAULTS = {
         "accel_max": 2.0,
         "rest_speed": 0.05,
         "active_on_start": False,
+        "box": [],
     },
     "pose": {
         "model_complexity": 1,

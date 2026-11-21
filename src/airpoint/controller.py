@@ -9,7 +9,7 @@ from . import inject
 from .capture import Camera
 from .gestures import GestureEngine
 from .hands import HandTracker
-from .pointer import RelativePointer
+from .pointer import AbsolutePointer, RelativePointer
 from .pose import PoseTracker
 
 
@@ -33,6 +33,8 @@ class Controller:
         self._scroll_acc = 0.0
         self._scroll_dir = 1
         self._frame_index = 0
+        self._last_mode = ""
+        self._inside = False
 
     def start(self) -> None:
         with self._lock:
@@ -77,6 +79,7 @@ class Controller:
         pose = PoseTracker(self.config, self.log)
         hands = HandTracker(self.config, self.log)
         pointer = RelativePointer(self.config)
+        absolute = AbsolutePointer(self.config)
         gestures = GestureEngine(self.config, self.log)
         last_hit = 0.0
         last_preview = 0.0
@@ -98,6 +101,7 @@ class Controller:
             if self._reset.is_set():
                 self._reset.clear()
                 pointer.reset()
+                absolute.reset()
                 gestures.reset()
                 hands.reset()
                 self._frames = 0
@@ -105,6 +109,8 @@ class Controller:
                 self._carry_x = 0.0
                 self._carry_y = 0.0
                 self._scroll_acc = 0.0
+                self._inside = False
+                self._last_mode = ""
                 last_hit = 0.0
                 last_gesture_seen = 0.0
                 last_click_result = None
@@ -174,6 +180,42 @@ class Controller:
                     click_result = None
                     last_click_result = None
 
+            point = None
+            if wrist is not None:
+                point = (wrist[0], wrist[1])
+                if moving_result and moving_result.get("landmarks"):
+                    lm = moving_result["landmarks"]
+                    point = (
+                        sum(lm[i][0] for i in (0, 5, 9, 13, 17)) / 5.0,
+                        sum(lm[i][1] for i in (0, 5, 9, 13, 17)) / 5.0,
+                    )
+
+            box = self.config.get("pointer.box", [])
+            if not isinstance(box, list) or len(box) != 4:
+                box = []
+            mode = str(self.config.get("pointer.mode", "relative"))
+            if mode == "auto":
+                mode = "absolute" if box else "relative"
+            if mode == "absolute" and not box:
+                mode = "relative"
+
+            if mode != self._last_mode:
+                self._last_mode = mode
+                pointer.reset()
+                absolute.reset()
+                gestures.reset()
+                inject.release_all()
+                self._inside = False
+
+            inside = True
+            if box:
+                bx0, by0, bx1, by1 = [float(item) for item in box]
+                inside = (
+                    point is not None
+                    and bx0 <= point[0] <= bx1
+                    and by0 <= point[1] <= by1
+                )
+
             display_result = (
                 moving_result if scheme == "single" else click_result
             )
@@ -181,57 +223,69 @@ class Controller:
                 last_gesture_seen = now
 
             kind = "none"
-            if scheme == "single" and moving_result is not None:
-                kind = (
-                    "down"
-                    if moving_result["gesture"] == click_name
-                    else "up"
-                )
-            elif scheme == "double" and click_result is not None:
-                kind = (
-                    "down"
-                    if click_result["gesture"] == click_name
-                    else "up"
-                )
+            if inside:
+                if scheme == "single" and moving_result is not None:
+                    kind = (
+                        "down"
+                        if moving_result["gesture"] == click_name
+                        else "up"
+                    )
+                elif scheme == "double" and click_result is not None:
+                    kind = (
+                        "down"
+                        if click_result["gesture"] == click_name
+                        else "up"
+                    )
 
             screen_w, screen_h = inject.screen_size()
 
-            if wrist is not None:
-                dx, dy = pointer.update(
-                    wrist[0], wrist[1], now, screen_w, screen_h
-                )
-                if dx or dy:
-                    x, y = inject.get_cursor()
-                    target_x = x + dx + self._carry_x
-                    target_y = y + dy + self._carry_y
-                    next_x = int(round(target_x))
-                    next_y = int(round(target_y))
-                    inject.set_cursor(next_x, next_y)
-                    self._carry_x = max(
-                        -1.0, min(1.0, target_x - next_x)
+            if point is not None and inside:
+                if mode == "absolute":
+                    target = absolute.update(
+                        point[0], point[1], now, box, screen_w, screen_h
                     )
-                    self._carry_y = max(
-                        -1.0, min(1.0, target_y - next_y)
+                    if target is not None:
+                        inject.set_cursor(target[0], target[1])
+                else:
+                    if not self._inside:
+                        pointer.reset()
+                    dx, dy = pointer.update(
+                        point[0], point[1], now, screen_w, screen_h
                     )
+                    if dx or dy:
+                        x, y = inject.get_cursor()
+                        target_x = x + dx + self._carry_x
+                        target_y = y + dy + self._carry_y
+                        next_x = int(round(target_x))
+                        next_y = int(round(target_y))
+                        inject.set_cursor(next_x, next_y)
+                        self._carry_x = max(
+                            -1.0, min(1.0, target_x - next_x)
+                        )
+                        self._carry_y = max(
+                            -1.0, min(1.0, target_y - next_y)
+                        )
 
-                    edge = max(8, int(screen_h * 0.05))
-                    if dy < 0 and next_y <= edge:
-                        direction = 1
-                        self._scroll_acc += -dy
-                    elif dy > 0 and next_y >= screen_h - edge:
-                        direction = -1
-                        self._scroll_acc += dy
-                    else:
-                        direction = 0
-                        self._scroll_acc = 0.0
+                        edge = max(8, int(screen_h * 0.05))
+                        if dy < 0 and next_y <= edge:
+                            direction = 1
+                            self._scroll_acc += -dy
+                        elif dy > 0 and next_y >= screen_h - edge:
+                            direction = -1
+                            self._scroll_acc += dy
+                        else:
+                            direction = 0
+                            self._scroll_acc = 0.0
 
-                    if direction and direction != self._scroll_dir:
-                        self._scroll_acc = 0.0
-                    if direction:
-                        self._scroll_dir = direction
-                        while self._scroll_acc >= 40.0:
-                            inject.wheel(120 * self._scroll_dir)
-                            self._scroll_acc -= 40.0
+                        if direction and direction != self._scroll_dir:
+                            self._scroll_acc = 0.0
+                        if direction:
+                            self._scroll_dir = direction
+                            while self._scroll_acc >= 40.0:
+                                inject.wheel(120 * self._scroll_dir)
+                                self._scroll_acc -= 40.0
+
+            self._inside = inside
 
             cursor = inject.get_cursor()
             out = gestures.update(kind, now, cursor)
@@ -293,6 +347,8 @@ class Controller:
                         "hands": hands.ready,
                         "hand": moving_hand,
                         "scheme": scheme,
+                        "mode": mode,
+                        "inside": inside,
                         "gain": float(
                             self.config.get("pointer.gain_relative", 1.8)
                         ),

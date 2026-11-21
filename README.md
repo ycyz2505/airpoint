@@ -48,6 +48,9 @@ updates.
   and edge wheel scrolling.
 - Single-hand and two-hand schemes (right hand moves, left hand clicks).
 - Hand landmarks and gesture state in the preview window.
+- Absolute "virtual touch" mode: draw a box in the preview; the palm maps to
+  the screen inside the box. The same box acts as an active zone in relative
+  mode; outside it, the cursor freezes.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

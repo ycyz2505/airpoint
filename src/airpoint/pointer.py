@@ -123,3 +123,42 @@ class RelativePointer:
         self._last_t = t
         self._last_raw = (x, y)
         return dx, dy
+
+
+class AbsolutePointer:
+    def __init__(self, config):
+        self.config = config
+        self.reset()
+
+    def reset(self) -> None:
+        mincutoff = float(self.config.get("pointer.mincutoff", 0.8))
+        beta = float(self.config.get("pointer.beta", 0.3))
+        self._fx = OneEuro(mincutoff=mincutoff, beta=beta)
+        self._fy = OneEuro(mincutoff=mincutoff, beta=beta)
+
+    def update(
+        self,
+        x: float,
+        y: float,
+        t: float,
+        box,
+        screen_w: int,
+        screen_h: int,
+    ):
+        fx = self._fx(x, t)
+        fy = self._fy(y, t)
+
+        if not box or len(box) != 4:
+            return None
+        x0, y0, x1, y1 = [float(item) for item in box]
+        if x1 <= x0 or y1 <= y0:
+            return None
+
+        if not (x0 <= x <= x1 and y0 <= y <= y1):
+            return None
+
+        u = (fx - x0) / (x1 - x0)
+        v = (fy - y0) / (y1 - y0)
+        u = max(0.0, min(1.0, u))
+        v = max(0.0, min(1.0, v))
+        return u * screen_w, v * screen_h

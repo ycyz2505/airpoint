@@ -56,8 +56,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     win.geometry("780x900")
     win.minsize(700, 760)
 
-    image_label = ttk.Label(win, anchor="center")
-    image_label.pack(fill="both", expand=True, padx=8, pady=(8, 0))
+    canvas = tk.Canvas(win, width=640, height=360, highlightthickness=0)
+    canvas.pack(padx=8, pady=(8, 0))
 
     stats_var = tk.StringVar(value="未激活 / 无画面")
     ttk.Label(win, textvariable=stats_var, justify="left").pack(
@@ -113,8 +113,13 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     bar.pack(fill="x", padx=10, pady=(0, 10))
     toggle_button = ttk.Button(bar, text="激活")
     toggle_button.pack(side="left")
+    box_button = ttk.Button(bar, text="画框")
+    box_button.pack(side="left", padx=6)
+    ttk.Button(bar, text="清除框", command=lambda: clear_box()).pack(
+        side="left", padx=(0, 6)
+    )
     ttk.Button(bar, text="保存参数", command=lambda: save()).pack(
-        side="left", padx=6
+        side="left", padx=(0, 6)
     )
     ttk.Button(bar, text="重置手感", command=lambda: reset()).pack(
         side="left", padx=(0, 6)
@@ -123,14 +128,16 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
 
     photo = None
     last_seq = -1
+    img_w = 0
+    img_h = 0
+    box_mode = False
+    drag_start = None
 
     def toggle() -> None:
         controller.set_active(not controller.active)
         toggle_button.configure(
             text="暂停" if controller.active else "激活"
         )
-
-    toggle_button.configure(command=toggle)
 
     def save() -> None:
         config.save()
@@ -149,6 +156,92 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             "OpticalInputSvc", "已恢复手感默认值，点保存写入。", parent=win
         )
 
+    def draw_box() -> None:
+        canvas.delete("box")
+        box = config.get("pointer.box", [])
+        if (
+            isinstance(box, list)
+            and len(box) == 4
+            and img_w > 0
+            and img_h > 0
+        ):
+            x0, y0, x1, y1 = [float(item) for item in box]
+            canvas.create_rectangle(
+                x0 * img_w,
+                y0 * img_h,
+                x1 * img_w,
+                y1 * img_h,
+                outline="#ffd400",
+                width=2,
+                tags="box",
+            )
+
+    def toggle_box() -> None:
+        nonlocal box_mode, drag_start
+        box_mode = not box_mode
+        drag_start = None
+        canvas.delete("temp")
+        canvas.configure(cursor="crosshair" if box_mode else "")
+        box_button.configure(text="取消画框" if box_mode else "画框")
+
+    def clear_box() -> None:
+        config.set("pointer.box", [])
+        config.save()
+        draw_box()
+
+    def on_press(event) -> None:
+        nonlocal drag_start
+        if not box_mode:
+            return
+        drag_start = (event.x, event.y)
+        canvas.delete("temp")
+
+    def on_drag(event) -> None:
+        if not box_mode or drag_start is None:
+            return
+        canvas.delete("temp")
+        canvas.create_rectangle(
+            drag_start[0],
+            drag_start[1],
+            event.x,
+            event.y,
+            outline="#ff4040",
+            width=2,
+            tags="temp",
+        )
+
+    def on_release(event) -> None:
+        nonlocal drag_start, box_mode
+        if not box_mode or drag_start is None:
+            return
+        x0, y0 = drag_start
+        x1, y1 = event.x, event.y
+        drag_start = None
+        canvas.delete("temp")
+        if img_w <= 0 or img_h <= 0:
+            return
+        if abs(x1 - x0) < 20 or abs(y1 - y0) < 20:
+            return
+
+        nx0, nx1 = sorted((x0 / img_w, x1 / img_w))
+        ny0, ny1 = sorted((y0 / img_h, y1 / img_h))
+        nx0 = max(0.0, min(1.0, nx0))
+        nx1 = max(0.0, min(1.0, nx1))
+        ny0 = max(0.0, min(1.0, ny0))
+        ny1 = max(0.0, min(1.0, ny1))
+        config.set("pointer.box", [nx0, ny0, nx1, ny1])
+        config.save()
+
+        box_mode = False
+        canvas.configure(cursor="")
+        box_button.configure(text="画框")
+        draw_box()
+
+    box_button.configure(command=toggle_box)
+    canvas.bind("<ButtonPress-1>", on_press)
+    canvas.bind("<B1-Motion>", on_drag)
+    canvas.bind("<ButtonRelease-1>", on_release)
+
     def close() -> None:
         bus.set_enabled(False)
         win.destroy()
@@ -164,8 +257,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"姿态：{'就绪' if stats.get('pose') else '未就绪'}    "
             f"手部：{'就绪' if stats.get('hands') else '未就绪'}    "
             f"方案：{stats.get('scheme', 'single')}    "
-            f"手势：{stats.get('gesture', 'none')}    "
-            f"状态：{stats.get('state', 'Idle')}\n"
+            f"模式：{stats.get('mode', 'relative')}    "
+            f"框内：{'是' if stats.get('inside') else '否'}\n"
             f"手：{stats.get('hand', 'right')}    "
             f"增益：{stats.get('gain', 0.0):.2f}    "
             f"手腕置信：{stats.get('wrist_conf', 0.0):.2f}    "
@@ -174,16 +267,27 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         )
 
     def poll() -> None:
-        nonlocal photo, last_seq
+        nonlocal photo, last_seq, img_w, img_h
         frame, stats = bus.latest()
         if stats:
             stats["active"] = controller.active
         seq = int(stats.get("seq", 0))
-        if frame is not None and seq != last_seq:
+
+        if (
+            frame is not None
+            and seq != last_seq
+            and not (box_mode and drag_start is not None)
+        ):
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            photo = ImageTk.PhotoImage(image=Image.fromarray(rgb))
-            image_label.configure(image=photo)
+            image = Image.fromarray(rgb)
+            photo = ImageTk.PhotoImage(image=image)
+            img_w, img_h = image.width, image.height
+            canvas.delete("all")
+            canvas.create_image(0, 0, anchor="nw", image=photo)
+            canvas.configure(width=img_w, height=img_h)
+            draw_box()
             last_seq = seq
+
         stats_var.set(format_stats(stats))
         toggle_button.configure(
             text="暂停" if controller.active else "激活"
