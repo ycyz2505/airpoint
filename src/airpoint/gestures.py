@@ -36,6 +36,15 @@ class GestureEngine:
         self._anchor = None
         return out
 
+    def hold_progress(self, now: float) -> float:
+        """How far a pending press is towards becoming a right click."""
+        if self.state != "Pending" or self._anchor is None:
+            return 0.0
+        hold = float(self.config.get("gesture.right_click_ms", 1000.0)) / 1000.0
+        if hold <= 0.0:
+            return 0.0
+        return max(0.0, min(1.0, (now - self._anchor_time) / hold))
+
     def _emit_click(self, out: GestureOutput, now: float,
                     cursor: tuple[int, int]) -> None:
         window = float(self.config.get("gesture.double_click_ms", 350)) / 1000.0

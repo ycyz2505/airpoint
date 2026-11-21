@@ -32,12 +32,15 @@ class ControlBar:
     the few actions a lesson actually needs.
     """
 
-    def __init__(self, root, controller, config: Config, on_settings, on_exit):
+    def __init__(self, root, controller, config: Config, on_settings, on_exit,
+                 on_recalibrate=None, on_stop=None):
         self.root = root
         self.controller = controller
         self.config = config
         self.on_settings = on_settings
         self.on_exit = on_exit
+        self.on_recalibrate = on_recalibrate
+        self.on_stop = on_stop
         self.win = None
         self._toggle = None
         self._status = None
@@ -85,8 +88,11 @@ class ControlBar:
             side="left", padx=2
         )
         _label("模式", self._toggle_mode, frame).pack(side="left", padx=2)
+        _label("标定", self._recalibrate, frame).pack(side="left", padx=2)
         _label("预览", self._preview, frame).pack(side="left", padx=2)
         _label("设置", self._settings, frame).pack(side="left", padx=2)
+        _label("急停", self._stop, frame).pack(side="left", padx=2)
+        _label("退出", self._exit, frame).pack(side="left", padx=2)
 
         win.update_idletasks()
         width = win.winfo_reqwidth()
@@ -136,6 +142,20 @@ class ControlBar:
         if self.on_settings is not None:
             self.on_settings()
 
+    def _recalibrate(self) -> None:
+        if self.on_recalibrate is not None:
+            self.on_recalibrate()
+
+    def _stop(self) -> None:
+        self.controller.set_active(False)
+        if self.on_stop is not None:
+            self.on_stop()
+        self._refresh()
+
+    def _exit(self) -> None:
+        if self.on_exit is not None:
+            self.on_exit()
+
     def _refresh(self) -> None:
         if self.win is None:
             return
@@ -157,6 +177,196 @@ class ControlBar:
             self.win.after(400, self._poll)
         except tk.TclError:
             pass
+
+
+class HoldRing:
+    """A small ring under the cursor that fills while a long press builds.
+
+    The ring is the only cue that the press is still a press and not yet a
+    right click, which matters at six metres where the cursor itself is tiny.
+    """
+
+    def __init__(self, root, controller, config: Config):
+        self.root = root
+        self.controller = controller
+        self.config = config
+        self.win = None
+        self._canvas = None
+        self._arc = None
+        self._shown = False
+        self._size = 64
+
+    def _build(self) -> None:
+        from .magnifier import _click_through
+
+        win = tk.Toplevel(self.root)
+        self.win = win
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        try:
+            win.attributes("-alpha", 0.85)
+        except tk.TclError:
+            pass
+        win.configure(bg="#101010")
+        size = self._size
+        canvas = tk.Canvas(
+            win, width=size, height=size, bg="#101010",
+            highlightthickness=0, bd=0,
+        )
+        canvas.pack()
+        self._canvas = canvas
+        self._arc = canvas.create_arc(
+            6, 6, size - 6, size - 6,
+            start=90, extent=0, style="arc",
+            outline="#00d4ff", width=5,
+        )
+        win.update_idletasks()
+        _click_through(win)
+        win.withdraw()
+
+    def show(self, progress: float) -> None:
+        if self.win is None:
+            self._build()
+        if self.win is None:
+            return
+        from . import inject
+
+        x, y = inject.get_cursor()
+        size = self._size
+        try:
+            self.win.geometry(f"+{int(x - size / 2)}+{int(y - size / 2)}")
+            self._canvas.itemconfigure(
+                self._arc, extent=-max(0.0, min(1.0, progress)) * 360
+            )
+            if not self._shown:
+                self.win.deiconify()
+                self._shown = True
+        except tk.TclError:
+            self.win = None
+
+    def hide(self) -> None:
+        if self.win is None or not self._shown:
+            return
+        try:
+            self.win.withdraw()
+        except tk.TclError:
+            self.win = None
+        self._shown = False
+
+    def stop(self) -> None:
+        if self.win is not None:
+            try:
+                self.win.destroy()
+            except tk.TclError:
+                pass
+        self.win = None
+
+
+class ScreenHud:
+    """Draws the mapping box and a state badge over the real desktop.
+
+    Transparent, click-through, and never focused, so the box can be seen from
+    the back of the room while the teacher keeps using the whiteboard.
+    """
+
+    KEY = "#010203"
+
+    def __init__(self, root, controller, config: Config):
+        self.root = root
+        self.controller = controller
+        self.config = config
+        self.win = None
+        self._canvas = None
+        self._box = None
+        self._badge = None
+        self._text = ""
+        self._shown = False
+
+    def _build(self) -> None:
+        from .magnifier import _click_through
+
+        win = tk.Toplevel(self.root)
+        self.win = win
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=self.KEY)
+        try:
+            win.attributes("-transparentcolor", self.KEY)
+        except tk.TclError:
+            pass
+        screen_w = win.winfo_screenwidth()
+        screen_h = win.winfo_screenheight()
+        win.geometry(f"{screen_w}x{screen_h}+0+0")
+        canvas = tk.Canvas(
+            win, width=screen_w, height=screen_h, bg=self.KEY,
+            highlightthickness=0, bd=0,
+        )
+        canvas.pack()
+        self._canvas = canvas
+        self._box = canvas.create_rectangle(
+            0, 0, 0, 0, outline="#00d4ff", width=3, state="hidden",
+        )
+        self._badge = canvas.create_text(
+            24, 24, anchor="nw", text="", fill="#ffb400",
+            font=("Microsoft YaHei UI", 20, "bold"), state="hidden",
+        )
+        win.update_idletasks()
+        _click_through(win)
+        win.withdraw()
+
+    def refresh(self) -> None:
+        if self.win is None:
+            self._build()
+        if self.win is None:
+            return
+        try:
+            screen_w = self.win.winfo_screenwidth()
+            screen_h = self.win.winfo_screenheight()
+            box = self.config.get("pointer.box") or []
+            draw_box = bool(self.config.get("overlay.box", False)) and len(box) == 4
+            if draw_box:
+                x0, y0, x1, y1 = [float(item) for item in box]
+                self._canvas.coords(
+                    self._box,
+                    int(x0 * screen_w), int(y0 * screen_h),
+                    int(x1 * screen_w), int(y1 * screen_h),
+                )
+                self._canvas.itemconfigure(self._box, state="normal")
+            else:
+                self._canvas.itemconfigure(self._box, state="hidden")
+
+            recording = self.controller.recording
+            active = self.controller.active
+            text = ""
+            if recording:
+                text = "● 录制"
+            elif not active:
+                text = "● 暂停"
+            if text != self._text:
+                self._text = text
+                self._canvas.itemconfigure(
+                    self._badge,
+                    text=text,
+                    fill="#ff4040" if recording else "#ffb400",
+                    state="normal" if text else "hidden",
+                )
+
+            if (draw_box or text) and not self._shown:
+                self.win.deiconify()
+                self._shown = True
+            elif not draw_box and not text and self._shown:
+                self.win.withdraw()
+                self._shown = False
+        except tk.TclError:
+            self.win = None
+
+    def stop(self) -> None:
+        if self.win is not None:
+            try:
+                self.win.destroy()
+            except tk.TclError:
+                pass
+        self.win = None
 
 
 def draw_status(frame, stats: dict) -> None:

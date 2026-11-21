@@ -148,6 +148,56 @@ def main() -> None:
 
     ui.post(start_magnifier)
 
+    hold_ring = None
+
+    def start_hold_ring(root) -> None:
+        nonlocal hold_ring
+        if hold_ring is not None:
+            return
+        from .overlay import HoldRing
+
+        hold_ring = HoldRing(root, controller, config)
+        _poll_hold_ring()
+
+    def _poll_hold_ring() -> None:
+        if hold_ring is None:
+            return
+        progress = float(controller.hold_progress or 0.0)
+        if progress > 0.02 and bool(config.get("overlay.hold_ring", True)):
+            hold_ring.show(progress)
+        else:
+            hold_ring.hide()
+        root = hold_ring.root
+        try:
+            root.after(50, _poll_hold_ring)
+        except tk.TclError:
+            pass
+
+    ui.post(start_hold_ring)
+
+    hud = None
+
+    def start_hud(root) -> None:
+        nonlocal hud
+        if hud is not None:
+            return
+        from .overlay import ScreenHud
+
+        hud = ScreenHud(root, controller, config)
+        _poll_hud()
+
+    def _poll_hud() -> None:
+        if hud is None:
+            return
+        hud.refresh()
+        root = hud.root
+        try:
+            root.after(300, _poll_hud)
+        except tk.TclError:
+            pass
+
+    ui.post(start_hud)
+
     icon = None
 
     def first_run(root) -> None:
@@ -212,6 +262,7 @@ def main() -> None:
                 config,
                 on_settings=lambda: on_settings(),
                 on_exit=lambda: on_exit(),
+                on_recalibrate=lambda: on_recalibrate(),
             )
         bar.show()
 
@@ -247,6 +298,10 @@ def main() -> None:
         mouse_pause.cancel()
         if magnifier is not None:
             magnifier.stop()
+        if hold_ring is not None:
+            hold_ring.stop()
+        if hud is not None:
+            hud.stop()
         controller.stop()
         if icon is not None:
             icon.stop()

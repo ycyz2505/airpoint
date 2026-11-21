@@ -110,6 +110,8 @@ DEFAULTS = {
     "overlay": {
         "status_bar": True,
         "control_bar": False,
+        "box": False,
+        "hold_ring": True,
         "magnifier": False,
         "magnifier_size": 220,
         "magnifier_zoom": 2.5,

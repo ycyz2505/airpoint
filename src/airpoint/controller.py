@@ -58,6 +58,7 @@ class Controller:
         self._last_target = None
         self._offset_dirty = False
         self._held_since = 0.0
+        self._hold_progress = 0.0
         self._paused_notice = False
         self._writing = False
         self._diag = Diagnostics(1800)
@@ -99,6 +100,10 @@ class Controller:
     @property
     def writing(self) -> bool:
         return self._writing
+
+    @property
+    def hold_progress(self) -> float:
+        return self._hold_progress
 
     def set_active(self, active: bool) -> None:
         if active:
@@ -218,6 +223,7 @@ class Controller:
                 self._settle.clear()
                 self._last_target = None
                 self._held_since = 0.0
+                self._hold_progress = 0.0
                 self._paused_notice = False
                 self._window_start = time.time()
 
@@ -576,6 +582,7 @@ class Controller:
                     shifted = self._selfcal.apply(self._last_target)
                     ref = (int(round(shifted[0])), int(round(shifted[1])))
                 out = gestures.update(kind, now, cursor, ref)
+                self._hold_progress = gestures.hold_progress(now)
                 if out.left_click:
                     inject.button("left", True)
                     inject.button("left", False)
@@ -601,6 +608,7 @@ class Controller:
                     gestures.cancel()
                     gestures.reset()
                     self._held_since = 0.0
+                    self._hold_progress = 0.0
                     self._writing = False
                     self.log("watchdog released a button held over 5 s")
 

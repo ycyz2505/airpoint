@@ -335,6 +335,18 @@ class WizardTests(unittest.TestCase):
             self.assertTrue(out.right_click)
 
 
+    def test_hold_progress_fills_then_resets(self):
+        with TempConfig() as config:
+            config.set("gesture.right_click_ms", 1000)
+            engine = GestureEngine(config, lambda message: None)
+            self.assertEqual(engine.hold_progress(10.0), 0.0)
+            engine.update("down", 10.0, (100, 100))
+            self.assertAlmostEqual(engine.hold_progress(10.5), 0.5, places=2)
+            self.assertEqual(engine.hold_progress(12.0), 1.0)
+            engine.update("down", 12.0, (100, 100))
+            self.assertEqual(engine.hold_progress(12.1), 0.0)
+
+
 class SelfCalibrationTests(unittest.TestCase):
     def test_offset_moves_toward_the_error(self):
         from airpoint.selfcal import SelfCalibrator
