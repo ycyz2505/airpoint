@@ -67,10 +67,19 @@ DEFAULTS = {
     },
     "gesture": {
         "click": "auto",
+        "scheme": "auto",
         "right_click_ms": 1000,
         "drag_threshold_px": 6,
         "double_click_ms": 350,
         "personalized": False,
+        "pinch_enter": 0.45,
+        "pinch_exit": 0.65,
+        "fist_enter": 1.30,
+        "fist_exit": 1.50,
+    },
+    "hands": {
+        "model_complexity": 0,
+        "min_confidence": 0.5,
     },
     "overlay": {
         "status_bar": True,

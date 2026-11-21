@@ -7,6 +7,8 @@ import cv2
 
 from . import inject
 from .capture import Camera
+from .gestures import GestureEngine
+from .hands import HandTracker
 from .pointer import RelativePointer
 from .pose import PoseTracker
 
@@ -28,6 +30,9 @@ class Controller:
         self._hits = 0
         self._carry_x = 0.0
         self._carry_y = 0.0
+        self._scroll_acc = 0.0
+        self._scroll_dir = 1
+        self._frame_index = 0
 
     def start(self) -> None:
         with self._lock:
@@ -70,9 +75,13 @@ class Controller:
     def _run(self) -> None:
         camera = Camera(self.config, self.log)
         pose = PoseTracker(self.config, self.log)
+        hands = HandTracker(self.config, self.log)
         pointer = RelativePointer(self.config)
+        gestures = GestureEngine(self.config, self.log)
         last_hit = 0.0
         last_preview = 0.0
+        last_gesture_seen = 0.0
+        last_click_result = None
         self._window_start = time.time()
 
         while not self._stop.is_set():
@@ -89,11 +98,16 @@ class Controller:
             if self._reset.is_set():
                 self._reset.clear()
                 pointer.reset()
+                gestures.reset()
+                hands.reset()
                 self._frames = 0
                 self._hits = 0
                 self._carry_x = 0.0
                 self._carry_y = 0.0
+                self._scroll_acc = 0.0
                 last_hit = 0.0
+                last_gesture_seen = 0.0
+                last_click_result = None
                 self._window_start = time.time()
 
             if not camera.opened:
@@ -107,6 +121,7 @@ class Controller:
                 continue
 
             self._frames += 1
+            self._frame_index += 1
             height, width = frame.shape[:2]
             if width > 1280:
                 scale = 1280.0 / float(width)
@@ -120,12 +135,68 @@ class Controller:
 
             wrist = pose.process(small)
             now = time.time()
+
+            moving_hand = str(self.config.get("pointer.hand", "right"))
+            scheme = str(self.config.get("gesture.scheme", "auto"))
+            if scheme == "auto":
+                scheme = "single"
+            click_hand = "left" if moving_hand == "right" else "right"
+            click_name = str(self.config.get("gesture.click", "auto"))
+            if click_name == "auto":
+                click_name = "pinch" if scheme == "single" else "fist"
+
+            moving_result = None
+            click_result = None
+
             if wrist is not None:
+                moving_result = hands.process(
+                    frame, wrist, pose.elbow(moving_hand), moving_hand
+                )
                 if last_hit and now - last_hit > 0.4:
                     pointer.reset()
                 last_hit = now
                 self._hits += 1
-                screen_w, screen_h = inject.screen_size()
+
+            if scheme == "double":
+                click_wrist = pose.wrist(click_hand)
+                if click_wrist is not None:
+                    if self._frame_index % 2 == 0 or last_click_result is None:
+                        click_result = hands.process(
+                            frame,
+                            click_wrist,
+                            pose.elbow(click_hand),
+                            click_hand,
+                        )
+                        last_click_result = click_result
+                    else:
+                        click_result = last_click_result
+                else:
+                    click_result = None
+                    last_click_result = None
+
+            display_result = (
+                moving_result if scheme == "single" else click_result
+            )
+            if display_result is not None:
+                last_gesture_seen = now
+
+            kind = "none"
+            if scheme == "single" and moving_result is not None:
+                kind = (
+                    "down"
+                    if moving_result["gesture"] == click_name
+                    else "up"
+                )
+            elif scheme == "double" and click_result is not None:
+                kind = (
+                    "down"
+                    if click_result["gesture"] == click_name
+                    else "up"
+                )
+
+            screen_w, screen_h = inject.screen_size()
+
+            if wrist is not None:
                 dx, dy = pointer.update(
                     wrist[0], wrist[1], now, screen_w, screen_h
                 )
@@ -142,6 +213,47 @@ class Controller:
                     self._carry_y = max(
                         -1.0, min(1.0, target_y - next_y)
                     )
+
+                    edge = max(8, int(screen_h * 0.05))
+                    if dy < 0 and next_y <= edge:
+                        direction = 1
+                        self._scroll_acc += -dy
+                    elif dy > 0 and next_y >= screen_h - edge:
+                        direction = -1
+                        self._scroll_acc += dy
+                    else:
+                        direction = 0
+                        self._scroll_acc = 0.0
+
+                    if direction and direction != self._scroll_dir:
+                        self._scroll_acc = 0.0
+                    if direction:
+                        self._scroll_dir = direction
+                        while self._scroll_acc >= 40.0:
+                            inject.wheel(120 * self._scroll_dir)
+                            self._scroll_acc -= 40.0
+
+            cursor = inject.get_cursor()
+            out = gestures.update(kind, now, cursor)
+            if out.left_click:
+                inject.button("left", True)
+                inject.button("left", False)
+            if out.right_click:
+                inject.button("right", True)
+                inject.button("right", False)
+            if out.left_down:
+                inject.button("left", True)
+            if out.left_up:
+                inject.button("left", False)
+
+            if (
+                gestures.state != "Idle"
+                and kind == "none"
+                and now - last_gesture_seen > 0.3
+            ):
+                cancel = gestures.cancel()
+                if cancel.left_up:
+                    inject.button("left", False)
 
             elapsed = max(0.5, now - self._window_start)
             fps = self._frames / elapsed
@@ -167,6 +279,8 @@ class Controller:
                     interpolation=cv2.INTER_AREA,
                 )
                 pose.draw(preview_frame)
+                hands.draw(preview_frame, moving_result)
+                hands.draw(preview_frame, click_result)
                 self.preview.publish(
                     preview_frame,
                     {
@@ -176,13 +290,35 @@ class Controller:
                         "fps": fps,
                         "hit": hit,
                         "pose": pose.ready,
-                        "hand": str(
-                            self.config.get("pointer.hand", "right")
-                        ),
+                        "hands": hands.ready,
+                        "hand": moving_hand,
+                        "scheme": scheme,
                         "gain": float(
                             self.config.get("pointer.gain_relative", 1.8)
                         ),
                         "wrist_conf": wrist[2] if wrist else 0.0,
+                        "gesture": (
+                            display_result["gesture"]
+                            if display_result
+                            else "none"
+                        ),
+                        "state": gestures.state,
+                        "pinch": bool(
+                            display_result and display_result.get("pinch")
+                        ),
+                        "fist": bool(
+                            display_result and display_result.get("fist")
+                        ),
+                        "pinch_ratio": float(
+                            display_result.get("pinch_ratio", 0.0)
+                            if display_result
+                            else 0.0
+                        ),
+                        "fist_ratio": float(
+                            display_result.get("fist_ratio", 0.0)
+                            if display_result
+                            else 0.0
+                        ),
                     },
                 )
 
@@ -195,4 +331,5 @@ class Controller:
 
         camera.close()
         pose.close()
+        hands.close()
         inject.release_all()

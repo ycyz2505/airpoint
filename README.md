@@ -44,6 +44,10 @@ updates.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `F12` emergency stop.
 - Preview/diagnostics window with the camera image, pose skeleton, wrist hit
   rate, and live gain/smoothing/prediction sliders.
+- Left click by pinch or fist; right click by holding 1 s; drag, double click,
+  and edge wheel scrolling.
+- Single-hand and two-hand schemes (right hand moves, left hand clicks).
+- Hand landmarks and gesture state in the preview window.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

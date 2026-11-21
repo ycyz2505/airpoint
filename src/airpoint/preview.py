@@ -53,8 +53,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     win = tk.Toplevel(root)
     root._preview_window = win
     win.title("OpticalInputSvc 预览诊断")
-    win.geometry("780x860")
-    win.minsize(700, 720)
+    win.geometry("780x900")
+    win.minsize(700, 760)
 
     image_label = ttk.Label(win, anchor="center")
     image_label.pack(fill="both", expand=True, padx=8, pady=(8, 0))
@@ -162,9 +162,15 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"FPS：{stats.get('fps', 0.0):.1f}    "
             f"手腕：{stats.get('hit', 0.0):.0f}%\n"
             f"姿态：{'就绪' if stats.get('pose') else '未就绪'}    "
+            f"手部：{'就绪' if stats.get('hands') else '未就绪'}    "
+            f"方案：{stats.get('scheme', 'single')}    "
+            f"手势：{stats.get('gesture', 'none')}    "
+            f"状态：{stats.get('state', 'Idle')}\n"
             f"手：{stats.get('hand', 'right')}    "
             f"增益：{stats.get('gain', 0.0):.2f}    "
-            f"手腕置信：{stats.get('wrist_conf', 0.0):.2f}"
+            f"手腕置信：{stats.get('wrist_conf', 0.0):.2f}    "
+            f"捏合比：{stats.get('pinch_ratio', 0.0):.2f}    "
+            f"握拳比：{stats.get('fist_ratio', 0.0):.2f}"
         )
 
     def poll() -> None:

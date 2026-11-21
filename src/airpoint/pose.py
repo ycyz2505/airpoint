@@ -74,6 +74,20 @@ class PoseTracker:
                 pass
             self._pose = None
 
+    def landmark(self, index: int, min_visibility: float = 0.3):
+        if not self.last_landmarks:
+            return None
+        item = self.last_landmarks[index]
+        if item.visibility < min_visibility:
+            return None
+        return float(item.x), float(item.y), float(item.visibility)
+
+    def wrist(self, hand: str = "right"):
+        return self.landmark(15 if hand == "left" else 16)
+
+    def elbow(self, hand: str = "right"):
+        return self.landmark(13 if hand == "left" else 14)
+
     def draw(self, frame) -> None:
         landmarks = self.last_landmarks
         if not landmarks:

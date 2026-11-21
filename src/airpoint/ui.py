@@ -156,6 +156,12 @@ SECTIONS = [
         "手势",
         [
             (
+                "gesture.scheme",
+                "手方案",
+                "choice",
+                ["auto", "single", "double"],
+            ),
+            (
                 "gesture.click",
                 "点击手势",
                 "choice",
@@ -164,6 +170,11 @@ SECTIONS = [
             ("gesture.right_click_ms", "右键长按（ms）", "int"),
             ("gesture.drag_threshold_px", "拖拽阈值（px）", "int"),
             ("gesture.double_click_ms", "双击间隔（ms）", "int"),
+            ("hands.model_complexity", "手部模型", "choice", ["0", "1"]),
+            ("gesture.pinch_enter", "捏合进入", "float"),
+            ("gesture.pinch_exit", "捏合退出", "float"),
+            ("gesture.fist_enter", "握拳进入", "float"),
+            ("gesture.fist_exit", "握拳退出", "float"),
         ],
     ),
     (
