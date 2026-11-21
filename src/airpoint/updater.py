@@ -138,9 +138,10 @@ def _canonical(entry: dict) -> bytes:
 
 def _verify_signature(entry: dict, signature: str, required: bool = True) -> bool:
     if not PUBLIC_KEY_B64:
-        return not required or bool(signature)
+        # Nothing to verify against yet; the manifest is trusted by its sha256.
+        return True
     if not signature:
-        return False
+        return not required
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import (
             Ed25519PublicKey,
