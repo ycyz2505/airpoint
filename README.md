@@ -9,8 +9,10 @@ meters away.
 
 ## Status
 
-Early prototype: silent tray, password-protected settings, self-update, and a
-pose-based relative cursor (right or left wrist).
+Working build: silent tray, password-protected settings, self-update, pose and
+hand tracking, absolute and relative pointing, A–E tiering, calibration,
+profiles, recording, replay, magnifier, presentation mode, diagnostics export,
+and survey mode.
 
 ## Planned capabilities
 
@@ -85,6 +87,19 @@ automatic updates.
   are opt-in so the interaction does not flip underneath the user.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
+- Writing magnifier: a small always-on-top, click-through window follows the
+  cursor while a button is held and shows a 2.5x (adjustable) view of the
+  screen area under it, so the stroke lands where intended.
+- Presentation mode: a 5 % safe band around the screen edge ignores clicks so
+  the cursor cannot fire a tool by accident; the status line shows `DEMO` and
+  the control bar stays hidden.
+- Diagnostics export: the preview window's **导出诊断** button writes the last
+  30 seconds of per-frame features (tier, band, palm size, drop rate, gesture
+  state, cursor, fps, CPU, memory) as a CSV into the data directory.
+- Survey mode: a fullscreen camera view with large statistics and a 30-second
+  test that measures shoulder width, palm size, drop rate, and confidence, then
+  suggests a tier (with the reason) and can lock it in one click.
+- Tray additions: **勘测模式…**, **重新标定…**, and **打开数据目录**.
 
 ## Settings
 
@@ -111,5 +126,5 @@ tags.
 
 ## Notes
 
-- Fully offline; no network access.
-- No telemetry.
+- No telemetry. The app only reaches the network to check for and download its
+  own updates.

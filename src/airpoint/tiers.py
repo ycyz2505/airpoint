@@ -24,6 +24,59 @@ class TierState:
     applied: bool
 
 
+def band_for(shoulder: float, config) -> str:
+    """Distance band from normalised shoulder width."""
+    a = float(config.get("tier.shoulder_a", 0.085))
+    b = float(config.get("tier.shoulder_b", 0.060))
+    c = float(config.get("tier.shoulder_c", 0.045))
+    d = float(config.get("tier.shoulder_d", 0.034))
+    if shoulder >= a:
+        return "A"
+    if shoulder >= b:
+        return "B"
+    if shoulder >= c:
+        return "C"
+    if shoulder >= d:
+        return "D"
+    return "E"
+
+
+def lower(name: str, steps: int) -> str:
+    index = min(len(ORDER) - 1, ORDER.index(name) + steps)
+    return ORDER[index]
+
+
+def suggest_tier(
+    shoulder: float,
+    palm_px: float,
+    drop: float,
+    pose_conf: float,
+    config,
+) -> tuple[str, str]:
+    """Pick a tier for measured conditions; returns (tier, reason)."""
+    band = band_for(shoulder, config)
+    target = band
+    reasons = []
+    if palm_px > 0:
+        if palm_px < float(config.get("tier.palm_ok", 20.0)):
+            target = lower(target, 1)
+            reasons.append("手掌偏小")
+        elif (
+            palm_px < float(config.get("tier.palm_good", 30.0))
+            and ORDER.index(target) <= 1
+        ):
+            target = lower(target, 1)
+            reasons.append("手掌一般")
+    if drop > float(config.get("tier.drop_bad", 0.35)):
+        target = lower(target, 1)
+        reasons.append("丢手偏多")
+    if pose_conf and pose_conf < 0.4:
+        target = lower(target, 1)
+        reasons.append("姿态置信偏低")
+    reason = "、".join(reasons) if reasons else "距离与手掌均合适"
+    return target, f"{band} 档（{reason}）"
+
+
 class TierEngine:
     def __init__(self, config, log):
         self.config = config
@@ -38,27 +91,13 @@ class TierEngine:
         self._adopted = False
 
     def _band(self) -> str:
-        shoulder = self.shoulder
-        if shoulder <= 0:
+        if self.shoulder <= 0:
             return self.band or "C"
-        a = float(self.config.get("tier.shoulder_a", 0.085))
-        b = float(self.config.get("tier.shoulder_b", 0.060))
-        c = float(self.config.get("tier.shoulder_c", 0.045))
-        d = float(self.config.get("tier.shoulder_d", 0.034))
-        if shoulder >= a:
-            return "A"
-        if shoulder >= b:
-            return "B"
-        if shoulder >= c:
-            return "C"
-        if shoulder >= d:
-            return "D"
-        return "E"
+        return band_for(self.shoulder, self.config)
 
     @staticmethod
     def _lower(name: str, steps: int) -> str:
-        index = min(len(ORDER) - 1, ORDER.index(name) + steps)
-        return ORDER[index]
+        return lower(name, steps)
 
     def update(
         self,

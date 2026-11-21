@@ -24,25 +24,39 @@ def create_icon(
     on_exit,
     is_active,
     is_recording,
+    on_recalibrate=None,
+    on_data_dir=None,
+    on_survey=None,
 ) -> pystray.Icon:
+    items = [
+        pystray.MenuItem(
+            lambda item: "暂停鼠标" if is_active() else "激活鼠标",
+            lambda: on_toggle(),
+        ),
+        pystray.MenuItem("预览诊断…", lambda: on_preview()),
+        pystray.MenuItem(
+            lambda item: (
+                "停止录制" if is_recording() else "开始录制"
+            ),
+            lambda: on_record(),
+        ),
+    ]
+    if on_survey is not None:
+        items.append(pystray.MenuItem("勘测模式…", lambda: on_survey()))
+    if on_recalibrate is not None:
+        items.append(
+            pystray.MenuItem("重新标定…", lambda: on_recalibrate())
+        )
+    items.append(pystray.MenuItem("设置…", lambda: on_settings()))
+    items.append(pystray.MenuItem("检查更新", lambda: on_check()))
+    if on_data_dir is not None:
+        items.append(
+            pystray.MenuItem("打开数据目录", lambda: on_data_dir())
+        )
+    items.append(pystray.MenuItem("退出", lambda: on_exit()))
     return pystray.Icon(
         "OpticalInputSvc",
         _image(),
         "OpticalInputSvc · 运行中",
-        menu=pystray.Menu(
-            pystray.MenuItem(
-                lambda item: "暂停鼠标" if is_active() else "激活鼠标",
-                lambda: on_toggle(),
-            ),
-            pystray.MenuItem("预览诊断…", lambda: on_preview()),
-            pystray.MenuItem(
-                lambda item: (
-                    "停止录制" if is_recording() else "开始录制"
-                ),
-                lambda: on_record(),
-            ),
-            pystray.MenuItem("设置…", lambda: on_settings()),
-            pystray.MenuItem("检查更新", lambda: on_check()),
-            pystray.MenuItem("退出", lambda: on_exit()),
-        ),
+        menu=pystray.Menu(*items),
     )

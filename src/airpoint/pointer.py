@@ -3,6 +3,14 @@ from __future__ import annotations
 import math
 
 
+def safe_zone(x: float, y: float, screen_w: int, screen_h: int,
+              margin: float = 0.05) -> bool:
+    """True when the point sits in the click-free screen-edge band."""
+    mx = max(1.0, float(screen_w) * float(margin))
+    my = max(1.0, float(screen_h) * float(margin))
+    return x < mx or y < my or x > screen_w - mx or y > screen_h - my
+
+
 class _LowPass:
     def __init__(self):
         self.value = None

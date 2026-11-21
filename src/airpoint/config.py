@@ -103,6 +103,10 @@ DEFAULTS = {
     "overlay": {
         "status_bar": True,
         "control_bar": False,
+        "magnifier": False,
+        "magnifier_size": 220,
+        "magnifier_zoom": 2.5,
+        "presentation": False,
     },
     "hotkey": {
         "toggle_active": "ctrl+alt+shift+f9",

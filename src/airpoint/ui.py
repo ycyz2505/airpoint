@@ -208,6 +208,10 @@ SECTIONS = [
         [
             ("overlay.status_bar", "状态条", "bool"),
             ("overlay.control_bar", "控制条", "bool"),
+            ("overlay.magnifier", "书写放大镜", "bool"),
+            ("overlay.magnifier_size", "放大镜尺寸（px）", "int"),
+            ("overlay.magnifier_zoom", "放大倍数", "float"),
+            ("overlay.presentation", "演示模式（边缘禁点）", "bool"),
         ],
     ),
     (

@@ -132,6 +132,12 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     ttk.Button(bar, text="重置手感", command=lambda: reset()).pack(
         side="left", padx=(0, 6)
     )
+    ttk.Button(
+        bar, text="导出诊断", command=lambda: export_diag()
+    ).pack(side="left", padx=(0, 6))
+    ttk.Button(bar, text="勘测模式", command=lambda: survey()).pack(
+        side="left", padx=(0, 6)
+    )
     ttk.Button(bar, text="关闭", command=lambda: close()).pack(side="right")
 
     photo = None
@@ -163,6 +169,23 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         messagebox.showinfo(
             "OpticalInputSvc", "已恢复手感默认值，点保存写入。", parent=win
         )
+
+    def export_diag() -> None:
+        try:
+            target = controller.export_diagnostics()
+        except OSError as exc:
+            messagebox.showerror(
+                "OpticalInputSvc", f"导出失败：{exc}", parent=win
+            )
+            return
+        messagebox.showinfo(
+            "OpticalInputSvc", f"已导出最近 30 秒数据：\n{target}", parent=win
+        )
+
+    def survey() -> None:
+        from .survey import open_survey
+
+        open_survey(win.master, bus, controller, config)
 
     def calibrate() -> None:
         if not controller.active:
@@ -278,7 +301,15 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     canvas.bind("<ButtonRelease-1>", on_release)
 
     def close() -> None:
-        bus.set_enabled(False)
+        survey_win = getattr(root, "_survey_window", None)
+        alive = False
+        if survey_win is not None:
+            try:
+                alive = bool(survey_win.winfo_exists())
+            except tk.TclError:
+                alive = False
+        if not alive:
+            bus.set_enabled(False)
         win.destroy()
 
     def format_stats(stats: dict) -> str:
@@ -320,7 +351,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"性能：{stats.get('perf', 'L0 全质量')}    "
             f"CPU：{stats.get('cpu', 0.0):.1f}%    "
             f"内存：{stats.get('rss', 0.0):.0f} MB    "
-            f"书写：{'是' if stats.get('writing') else '否'}"
+            f"书写：{'是' if stats.get('writing') else '否'}    "
+            f"演示：{'是' if stats.get('presentation') else '否'}"
         )
 
     def poll() -> None:

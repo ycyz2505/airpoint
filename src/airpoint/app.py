@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import sys
 import threading
 import time
@@ -134,6 +135,19 @@ def main() -> None:
     ui = UiThread()
     ui.start()
 
+    magnifier = None
+
+    def start_magnifier(root) -> None:
+        nonlocal magnifier
+        if magnifier is not None:
+            return
+        from .magnifier import WritingMagnifier
+
+        magnifier = WritingMagnifier(root, controller, config)
+        magnifier.start()
+
+    ui.post(start_magnifier)
+
     icon = None
 
     def first_run(root) -> None:
@@ -186,6 +200,9 @@ def main() -> None:
 
     def show_bar(root) -> None:
         nonlocal bar
+        if bool(config.get("overlay.presentation", False)):
+            log("control bar hidden: presentation mode")
+            return
         if bar is None:
             bar = ControlBar(
                 root,
@@ -226,6 +243,8 @@ def main() -> None:
 
     def do_exit() -> None:
         mouse_pause.cancel()
+        if magnifier is not None:
+            magnifier.stop()
         controller.stop()
         if icon is not None:
             icon.stop()
@@ -247,6 +266,43 @@ def main() -> None:
         else:
             controller.start_recording()
 
+    def on_recalibrate() -> None:
+        ui.post(lambda root: locked(root, lambda: recalibrate(root)))
+
+    def recalibrate(root) -> None:
+        open_preview(root, controller.preview, controller, config)
+        if not config.get("pointer.box"):
+            show_error(root, "请先在预览窗口里画框，再做标定。")
+            return
+        from .calibrate import run_calibration
+
+        controller.set_active(True)
+        run_calibration(
+            root,
+            controller.preview,
+            controller,
+            config,
+            root.winfo_screenwidth(),
+            root.winfo_screenheight(),
+        )
+
+    def on_survey() -> None:
+        ui.post(lambda root: locked(root, lambda: open_survey_now(root)))
+
+    def open_survey_now(root) -> None:
+        from .survey import open_survey
+
+        open_survey(root, controller.preview, controller, config)
+
+    def on_data_dir() -> None:
+        ui.post(lambda root: locked(root, lambda: open_data_dir(root)))
+
+    def open_data_dir(root) -> None:
+        try:
+            os.startfile(str(data_dir()))
+        except OSError as exc:
+            show_error(root, f"无法打开数据目录：{exc}")
+
     icon = create_icon(
         on_toggle,
         on_preview,
@@ -256,6 +312,9 @@ def main() -> None:
         on_exit,
         lambda: controller.active,
         lambda: controller.recording,
+        on_recalibrate=on_recalibrate,
+        on_data_dir=on_data_dir,
+        on_survey=on_survey,
     )
     marker = updates_dir() / f"started-{__version__}.ok"
     try:

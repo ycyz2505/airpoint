@@ -178,6 +178,8 @@ def draw_status(frame, stats: dict) -> None:
         f"{state}  {stats.get('mode', '')}  tier {stats.get('tier', '-')}  "
         f"{stats.get('fps', 0.0):.1f} fps  {stats.get('perf', '')}"
     )
+    if stats.get("presentation"):
+        text = "DEMO  " + text
     cv2.putText(
         frame, text, (8, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1,
         cv2.LINE_AA,

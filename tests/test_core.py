@@ -182,6 +182,115 @@ class TierTests(unittest.TestCase):
             self.assertEqual(state.name, "D")
 
 
+class SurveyTests(unittest.TestCase):
+    def test_near_seat_is_top_tier(self):
+        from airpoint.tiers import suggest_tier
+
+        with TempConfig() as config:
+            tier, reason = suggest_tier(0.10, 60.0, 0.05, 0.9, config)
+        self.assertEqual(tier, "A")
+        self.assertIn("A 档", reason)
+
+    def test_small_palm_lowers_tier(self):
+        from airpoint.tiers import suggest_tier
+
+        with TempConfig() as config:
+            tier, reason = suggest_tier(0.10, 12.0, 0.05, 0.9, config)
+        self.assertEqual(tier, "B")
+        self.assertIn("手掌偏小", reason)
+
+    def test_drop_and_low_confidence_lower_tier(self):
+        from airpoint.tiers import suggest_tier
+
+        with TempConfig() as config:
+            tier, reason = suggest_tier(0.05, 0.0, 0.5, 0.2, config)
+        self.assertEqual(tier, "E")
+        self.assertIn("丢手偏多", reason)
+        self.assertIn("姿态置信偏低", reason)
+
+    def test_collector_averages_samples(self):
+        from airpoint.survey import _Collector
+
+        collector = _Collector()
+        collector.reset()
+        collector.add({"palm_ok": True, "palm_px": 40.0, "drop": 0.2,
+                       "wrist_conf": 0.8, "shoulder": 0.06})
+        collector.add({"palm_ok": False, "palm_px": 0.0, "drop": 0.4,
+                       "wrist_conf": 0.0, "shoulder": 0.08})
+        summary = collector.summary()
+        self.assertAlmostEqual(summary["palm"], 40.0)
+        self.assertAlmostEqual(summary["drop"], 0.3)
+        self.assertAlmostEqual(summary["shoulder"], 0.07)
+        self.assertEqual(summary["samples"], 2)
+
+
+class MagnifierTests(unittest.TestCase):
+    def test_source_rect_centres_on_cursor(self):
+        from airpoint.magnifier import source_rect
+
+        left, top, side = source_rect(960, 540, 1920, 1080, 2.5, 200)
+        self.assertEqual(side, 80)
+        self.assertEqual((left, top), (920, 500))
+
+    def test_source_rect_clamps_at_edges(self):
+        from airpoint.magnifier import source_rect
+
+        left, top, side = source_rect(3, 2, 1920, 1080, 2.0, 200)
+        self.assertEqual((left, top, side), (0, 0, 100))
+        left, top, side = source_rect(1919, 1079, 1920, 1080, 2.0, 200)
+        self.assertEqual(left + side, 1920)
+        self.assertEqual(top + side, 1080)
+
+    def test_window_flips_near_edges(self):
+        from airpoint.magnifier import window_position
+
+        x, y = window_position(100, 100, 1920, 1080, 200, 48)
+        self.assertEqual((x, y), (148, 148))
+        x, y = window_position(1900, 1060, 1920, 1080, 200, 48)
+        self.assertLessEqual(x + 200, 1920)
+        self.assertLessEqual(y + 200, 1080)
+        self.assertGreaterEqual(x, 0)
+        self.assertGreaterEqual(y, 0)
+
+
+class SafeZoneTests(unittest.TestCase):
+    def test_edges_are_blocked(self):
+        from airpoint.pointer import safe_zone
+
+        self.assertTrue(safe_zone(10, 540, 1920, 1080))
+        self.assertTrue(safe_zone(960, 1070, 1920, 1080))
+        self.assertTrue(safe_zone(1915, 540, 1920, 1080))
+        self.assertTrue(safe_zone(960, 5, 1920, 1080))
+
+    def test_centre_is_free(self):
+        from airpoint.pointer import safe_zone
+
+        self.assertFalse(safe_zone(960, 540, 1920, 1080))
+        self.assertFalse(safe_zone(100, 100, 1920, 1080))
+
+
+class DiagnosticsTests(unittest.TestCase):
+    def test_export_writes_header_and_rows(self):
+        from airpoint.diagnostics import COLUMNS, Diagnostics
+
+        diag = Diagnostics()
+        diag.add(("1.0", 1, "C", "C", "40.0", "0.1"))
+        with tempfile.TemporaryDirectory() as folder:
+            target = diag.export(Path(folder) / "diag.csv")
+            lines = target.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(lines[0], ",".join(COLUMNS))
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(len(diag), 1)
+
+    def test_ring_buffer_is_bounded(self):
+        from airpoint.diagnostics import Diagnostics
+
+        diag = Diagnostics(capacity=3)
+        for index in range(5):
+            diag.add((index,))
+        self.assertEqual(len(diag), 3)
+
+
 class UpdateTests(unittest.TestCase):
     def test_version_compare(self):
         from airpoint.updater import _is_newer

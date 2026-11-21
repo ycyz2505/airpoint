@@ -3,14 +3,17 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from pathlib import Path
 
 import cv2
 
 from . import inject
 from .capture import Camera
+from .diagnostics import Diagnostics
 from .gestures import GestureEngine
 from .hands import HandTracker
-from .pointer import AbsolutePointer, RelativePointer
+from .paths import log_dir
+from .pointer import AbsolutePointer, RelativePointer, safe_zone
 from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
@@ -50,6 +53,8 @@ class Controller:
         self.governor = Governor(config, log)
         self._stroke = StrokeSmoother(config)
         self._paused_notice = False
+        self._writing = False
+        self._diag = Diagnostics(1800)
 
     def start(self) -> None:
         with self._lock:
@@ -65,6 +70,7 @@ class Controller:
         self._recording.clear()
         self._stop.set()
         self._active.clear()
+        self._writing = False
         with self._lock:
             thread = self._thread
         if thread is not None:
@@ -78,6 +84,10 @@ class Controller:
     def active(self) -> bool:
         return self._active.is_set()
 
+    @property
+    def writing(self) -> bool:
+        return self._writing
+
     def set_active(self, active: bool) -> None:
         if active:
             self._reset.set()
@@ -85,6 +95,7 @@ class Controller:
             self.log("controller active")
         else:
             self._active.clear()
+            self._writing = False
             inject.release_all()
             self.log("controller paused")
 
@@ -121,6 +132,12 @@ class Controller:
             return
         self._recording.clear()
         self.log("recording stop requested")
+
+    def export_diagnostics(self, path: Path | None = None) -> Path:
+        """Write the last 30 s of per-frame features as CSV."""
+        target = self._diag.export(path, folder=log_dir())
+        self.log(f"diagnostics written: {target} ({len(self._diag)} rows)")
+        return target
 
     def _run(self) -> None:
         camera = Camera(self.config, self.log)
@@ -270,6 +287,7 @@ class Controller:
                     self.log("perf paused: resource limit")
                 inject.release_all()
                 self._active.clear()
+                self._writing = False
                 continue
             if level >= 1 and self._frame_index % self.governor.frame_divisor():
                 continue
@@ -409,6 +427,13 @@ class Controller:
 
             screen_w, screen_h = inject.screen_size()
 
+            if kind != "none" and bool(
+                self.config.get("overlay.presentation", False)
+            ):
+                cx, cy = inject.get_cursor()
+                if safe_zone(cx, cy, screen_w, screen_h):
+                    kind = "none"
+
             calibration = self.config.get("pointer.calibration", [])
             calibration_size = self.config.get(
                 "pointer.calibration_size", []
@@ -426,6 +451,7 @@ class Controller:
             writing = bool(self.config.get("pointer.write_mode", True)) and (
                 gestures.state in ("Pending", "Dragging")
             )
+            self._writing = writing
 
             if point is not None and inside and not calibrating:
                 if mode == "absolute":
@@ -522,6 +548,29 @@ class Controller:
             fps = self._frames / elapsed
             hit = 100.0 * self._hits / max(1, self._frames)
 
+            cursor_x, cursor_y = inject.get_cursor()
+            display_gesture = (
+                display_result["gesture"] if display_result else "none"
+            )
+            self._diag.add((
+                f"{now:.3f}",
+                self._frame_index,
+                tier_state.name,
+                tier_state.band,
+                f"{self._last_palm_px:.1f}",
+                f"{drop:.3f}",
+                f"{wrist[2] if wrist else 0.0:.3f}",
+                display_gesture,
+                gestures.state,
+                mode,
+                int(inside),
+                cursor_x,
+                cursor_y,
+                f"{fps:.1f}",
+                f"{self.governor.cpu:.1f}",
+                f"{self.governor.rss_mb:.0f}",
+            ))
+
             if (
                 self.preview is not None
                 and self.preview.enabled
@@ -554,6 +603,9 @@ class Controller:
                         "tier": tier_state.name,
                         "fps": fps,
                         "perf": self.governor.name,
+                        "presentation": bool(
+                            self.config.get("overlay.presentation", False)
+                        ),
                     })
                 self.preview.publish(
                     preview_frame,
@@ -576,7 +628,11 @@ class Controller:
                         "cpu": self.governor.cpu,
                         "rss": self.governor.rss_mb,
                         "writing": writing,
+                        "presentation": bool(
+                            self.config.get("overlay.presentation", False)
+                        ),
                         "drop": drop,
+                        "shoulder": shoulder,
                         "mode": mode,
                         "inside": inside,
                         "calibrating": calibrating,
