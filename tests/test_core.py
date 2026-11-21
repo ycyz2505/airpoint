@@ -780,6 +780,39 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(_is_newer("0.9.9", "0.10.0"))
 
 
+class SecurityTests(unittest.TestCase):
+    def test_wrong_password_locks_and_survives_a_restart(self):
+        from airpoint.security import Security
+
+        with TempConfig() as config:
+            config.set("security.lockout_seconds", 30)
+            security = Security(config)
+            security.set_password("secret")
+            for _ in range(5):
+                self.assertFalse(security.check("wrong"))
+            self.assertGreater(security.locked_for(), 0)
+            self.assertFalse(security.check("secret"))
+
+            # A fresh instance reads the lockout from disk, so quitting the
+            # tray does not reset the attempt counter.
+            reopened = Security(config)
+            self.assertGreater(reopened.locked_for(), 0)
+            self.assertFalse(reopened.check("secret"))
+
+    def test_setting_a_password_clears_the_lockout(self):
+        from airpoint.security import Security
+
+        with TempConfig() as config:
+            config.set("security.lockout_seconds", 30)
+            security = Security(config)
+            security.set_password("secret")
+            for _ in range(5):
+                security.check("wrong")
+            security.set_password("newsecret")
+            self.assertEqual(security.locked_for(), 0)
+            self.assertTrue(security.check("newsecret"))
+
+
 class HotkeyTests(unittest.TestCase):
     def test_parse_modifiers_and_key(self):
         from airpoint import hotkeys

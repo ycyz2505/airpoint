@@ -23,6 +23,7 @@ DEFAULTS = {
         "password_hash": "",
         "password_salt": "",
         "lockout_seconds": 30,
+        "locked_until": 0,
     },
     "update": {
         "enabled": True,
