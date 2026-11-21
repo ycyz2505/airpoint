@@ -113,11 +113,15 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
 
     bar = ttk.Frame(win)
     bar.pack(fill="x", padx=10, pady=(0, 10))
+    track_var = tk.BooleanVar(value=False)
     toggle_button = ttk.Button(bar, text="激活")
     toggle_button.pack(side="left")
     box_button = ttk.Button(bar, text="画框")
     box_button.pack(side="left", padx=6)
     ttk.Button(bar, text="建议框", command=lambda: suggest()).pack(
+        side="left", padx=(0, 6)
+    )
+    ttk.Checkbutton(bar, text="跟踪框", variable=track_var).pack(
         side="left", padx=(0, 6)
     )
     ttk.Button(bar, text="清除框", command=lambda: clear_box()).pack(
@@ -145,6 +149,24 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         side="left", padx=(0, 6)
     )
     ttk.Button(bar, text="关闭", command=lambda: close()).pack(side="right")
+
+    def draw_track(stats) -> None:
+        canvas.delete("track")
+        if not track_var.get():
+            return
+        bounds = stats.get("hand_bounds")
+        if not bounds or img_w <= 0 or img_h <= 0:
+            return
+        canvas.create_rectangle(
+            bounds[0] * img_w,
+            bounds[1] * img_h,
+            bounds[2] * img_w,
+            bounds[3] * img_h,
+            outline="#00d4ff",
+            width=2,
+            dash=(4, 2),
+            tags="track",
+        )
 
     photo = None
     last_seq = -1
@@ -427,6 +449,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             canvas.configure(width=img_w, height=img_h)
             draw_box()
             last_seq = seq
+
+        draw_track(stats)
 
         stats_var.set(format_stats(stats))
         recording = bool(stats.get("recording"))

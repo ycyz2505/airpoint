@@ -821,6 +821,17 @@ class Controller:
                         "drop": drop,
                         "shoulder": shoulder,
                         "proc_ms": self._proc_ms,
+                        "hand_bounds": (
+                            (
+                                min(p[0] for p in moving_result["landmarks"]),
+                                min(p[1] for p in moving_result["landmarks"]),
+                                max(p[0] for p in moving_result["landmarks"]),
+                                max(p[1] for p in moving_result["landmarks"]),
+                            )
+                            if moving_result
+                            and moving_result.get("landmarks")
+                            else None
+                        ),
                         "body": pose.bounds(),
                         "mode": mode,
                         "inside": inside,

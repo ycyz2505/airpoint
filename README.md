@@ -96,7 +96,9 @@ automatic updates.
   the control bar stays hidden.
 - Diagnostics export: the preview window's **导出诊断** button writes the last
   30 seconds of per-frame features (tier, band, palm size, drop rate, gesture
-  state, cursor, fps, CPU, memory) as a CSV into the data directory.
+  state, cursor, fps, CPU, memory, frame cost) as a CSV into the data
+  directory. The **跟踪框** switch draws the tracked hand's bounding box over
+  the camera image.
 - Survey mode: a fullscreen camera view with large statistics and a 30-second
   test that measures shoulder width, palm size, drop rate, and confidence, then
   suggests a tier (with the reason) and can lock it in one click.
