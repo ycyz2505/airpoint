@@ -12,6 +12,7 @@ from tkinter import messagebox, simpledialog, ttk
 from .config import DEFAULTS
 from .paths import data_dir, log_dir
 from .profiles import ProfileStore
+from . import startup
 
 
 class UiThread:
@@ -103,7 +104,13 @@ SECTIONS = [
             ),
         ],
     ),
-    ("启动", [("startup.silent", "静默启动", "bool")]),
+    (
+        "启动",
+        [
+            ("startup.silent", "静默启动", "bool"),
+            ("startup.auto_run", "开机自动运行", "bool"),
+        ],
+    ),
     (
         "性能",
         [
@@ -274,6 +281,12 @@ def open_settings(root, config, security, version: str, on_saved=None) -> None:
             )
             return
         config.save()
+        if not startup.set_enabled(bool(config.get("startup.auto_run"))):
+            messagebox.showwarning(
+                "OpticalInputSvc",
+                "开机自启设置未写入注册表，其余设置已保存。",
+                parent=win,
+            )
         if on_saved is not None:
             on_saved()
         messagebox.showinfo("OpticalInputSvc", "已保存。", parent=win)

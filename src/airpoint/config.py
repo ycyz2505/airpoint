@@ -13,6 +13,7 @@ DEFAULTS = {
     },
     "startup": {
         "silent": True,
+        "auto_run": False,
         "first_run_wizard": True,
     },
     "security": {

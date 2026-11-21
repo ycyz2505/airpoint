@@ -31,10 +31,15 @@ downloads the new executable through a list of GitHub mirrors:
 3. `https://ghproxy.net/`
 4. direct GitHub
 
-The download is checked against the SHA-256 in the manifest and an Ed25519
-signature, then the app restarts itself to apply it. A failed start rolls back
-to the previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic
-updates.
+The download is checked against the SHA-256 in the manifest and, once a public
+key is configured, an Ed25519 signature, then the app restarts itself to apply
+it. A failed start rolls back to the previous build. `update.apply_when`
+chooses between installing at startup, staging until the next start, or only
+on request. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
+
+To enable signature checks, run `python tools/make_key.py` once, put the
+printed private key into the `UPDATE_SIGNING_KEY` repository secret, and paste
+the printed public key into `src/airpoint/update_pubkey.py`.
 
 ## Current build
 
@@ -66,6 +71,9 @@ updates.
 - Manual recording from the tray: the controller stops cursor work and writes
   the raw camera stream to `recordings/rec-*.avi` (MJPG) after checking free
   disk space.
+- Start with Windows: the **开机自动运行** switch writes or removes the
+  `HKCU\...\CurrentVersion\Run` entry, and the app reconciles it on launch so
+  a stale entry never survives a moved executable.
 - Offline replay: `python -m airpoint.replay clip.avi --csv metrics.csv`
   re-runs pose, hands, pointer, gestures, and tiering over a recording and
   reports hit rate, palm size, cursor path, and tier time, so feel can be

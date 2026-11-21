@@ -253,7 +253,48 @@ del "%~f0"
     return path
 
 
-def check_and_update(log, on_ready=None, delay: float = 3.0) -> None:
+def staged_path() -> Path:
+    target = exe_path()
+    return target.with_name(target.stem + "-new.exe")
+
+
+def apply_staged(log) -> bool:
+    """Apply a build that was downloaded but not installed last time."""
+    if not getattr(sys, "frozen", False):
+        return False
+    new = staged_path()
+    if not new.exists():
+        return False
+    target = exe_path()
+    try:
+        if new.stat().st_size < 1024 * 1024:
+            new.unlink()
+            return False
+    except OSError:
+        return False
+    marker = updates_dir() / "started-pending.ok"
+    try:
+        if marker.exists():
+            marker.unlink()
+    except OSError:
+        pass
+    try:
+        batch = _write_batch(target, new, os.getpid(), marker)
+    except OSError as exc:
+        log(f"staged apply failed: {exc}")
+        return False
+    log("applying staged build")
+    subprocess.Popen(
+        ["cmd.exe", "/C", str(batch)],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    time.sleep(0.5)
+    os._exit(0)
+
+
+def check_and_update(
+    log, on_ready=None, delay: float = 3.0, apply_now: bool = True
+) -> None:
     if not getattr(sys, "frozen", False):
         log("not frozen; update disabled")
         return
@@ -275,8 +316,11 @@ def check_and_update(log, on_ready=None, delay: float = 3.0) -> None:
             return
         target = exe_path()
         part = _download(entry, log, target)
-        new = target.with_name(target.stem + "-new.exe")
+        new = staged_path()
         part.replace(new)
+        if not apply_now:
+            log(f"staged {remote}; will apply on next start")
+            return
         marker = updates_dir() / f"started-{remote}.ok"
         batch = _write_batch(target, new, os.getpid(), marker)
         log(f"staged {remote}; restarting")

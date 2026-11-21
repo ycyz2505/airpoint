@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 
+from . import startup
 from . import updater
 from .config import Config
 from .controller import Controller
@@ -112,6 +113,15 @@ def main() -> None:
     security = Security(config)
     log = make_logger("app")
     log(f"start {__version__}")
+
+    if str(config.get("update.apply_when", "startup")) != "manual":
+        updater.apply_staged(log)
+
+    if getattr(sys, "frozen", False):
+        want = bool(config.get("startup.auto_run", False))
+        if want != startup.is_enabled():
+            if not startup.set_enabled(want):
+                log("autostart registry update failed")
 
     controller = Controller(config, log, preview=PreviewBus())
     controller.start()
@@ -250,6 +260,9 @@ def main() -> None:
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
         marker.write_text(str(time.time()), encoding="utf-8")
+        (updates_dir() / "started-pending.ok").write_text(
+            str(time.time()), encoding="utf-8"
+        )
     except OSError:
         pass
 
@@ -275,14 +288,27 @@ def main() -> None:
     if bool(config.get("pointer.active_on_start", False)):
         controller.set_active(True)
 
+    def update_loop() -> None:
+        hours = float(config.get("update.interval_hours", 6) or 0)
+        while hours > 0:
+            time.sleep(max(0.5, hours) * 3600.0)
+            if not bool(config.get("update.enabled", True)):
+                continue
+            if controller.recording:
+                continue
+            updater.check_and_update(log, on_ready=icon.stop, delay=0.0)
+
     if "--no-update" not in sys.argv and bool(
         config.get("update.enabled", True)
     ):
-        threading.Thread(
-            target=updater.check_and_update,
-            args=(log,),
-            kwargs={"on_ready": icon.stop},
-            daemon=True,
-        ).start()
+        apply_now = str(config.get("update.apply_when", "startup")) == "startup"
+        if bool(config.get("update.check_on_start", True)):
+            threading.Thread(
+                target=updater.check_and_update,
+                args=(log,),
+                kwargs={"on_ready": icon.stop, "apply_now": apply_now},
+                daemon=True,
+            ).start()
+        threading.Thread(target=update_loop, daemon=True).start()
 
     icon.run()
