@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import importlib.util
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -404,9 +405,7 @@ class WizardTests(unittest.TestCase):
 
 class CalibrationTests(unittest.TestCase):
     def setUp(self):
-        try:
-            import cv2  # noqa: F401
-        except ImportError:
+        if importlib.util.find_spec("cv2") is None:
             self.skipTest("opencv not installed")
 
     def _samples(self, outlier=False):
@@ -788,6 +787,28 @@ class SettingsSchemaTests(unittest.TestCase):
                     node = node.get(part) if isinstance(node, dict) else None
                 self.assertIn(str(node), [str(item) for item in options],
                               f"{key} 默认值不在选项里")
+
+
+class SupervisorTests(unittest.TestCase):
+    def test_frame_loop_restarts_then_gives_up(self):
+        from airpoint.controller import Controller
+
+        class Broken(Controller):
+            def __init__(self, config, log):
+                super().__init__(config, log)
+                self.crashes = 0
+
+            def _run(self):
+                self.crashes += 1
+                raise RuntimeError("boom")
+
+        with TempConfig() as config:
+            controller = Broken(config, lambda message: None)
+            controller._crash_backoff = 0.01
+            controller.set_active(True)
+            controller._supervise()
+            self.assertEqual(controller.crashes, 5)
+            self.assertFalse(controller.active)
 
 
 class ConfigTests(unittest.TestCase):

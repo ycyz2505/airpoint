@@ -4,7 +4,7 @@ import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from .personalize import LABELS, Personalizer, features
+from .personalize import LABELS, features
 
 STEPS = (
     ("open", "张开五指，手掌正对镜头"),

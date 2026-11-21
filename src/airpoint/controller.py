@@ -71,6 +71,7 @@ class Controller:
         self._inject_blocked = False
         self._blocked_log = 0.0
         self._diag = Diagnostics(1800)
+        self._crash_backoff = 0.5
         self.personalizer = Personalizer()
 
     def start(self) -> None:
@@ -79,9 +80,33 @@ class Controller:
                 return
             self._stop.clear()
             self._thread = threading.Thread(
-                target=self._run, daemon=True, name="airpoint-controller"
+                target=self._supervise, daemon=True, name="airpoint-controller"
             )
             self._thread.start()
+
+    def _supervise(self) -> None:
+        """Keep the frame loop alive; a bad frame must not kill the service."""
+        crashes = 0
+        while not self._stop.is_set():
+            try:
+                self._run()
+                return
+            except Exception as exc:
+                inject.release_all()
+                crashes += 1
+                try:
+                    self.log(f"frame loop crashed ({crashes}): {exc!r}")
+                except Exception:
+                    pass
+                if crashes >= 5:
+                    self._active.clear()
+                    try:
+                        self.log("frame loop gave up after 5 crashes")
+                    except Exception:
+                        pass
+                    return
+                if self._stop.wait(min(5.0, self._crash_backoff * crashes)):
+                    return
 
     def stop(self) -> None:
         self._recording.clear()

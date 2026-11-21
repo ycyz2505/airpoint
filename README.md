@@ -90,6 +90,9 @@ automatic updates.
   are opt-in so the interaction does not flip underneath the user.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
+- If a frame throws, the loop releases the buttons, backs off, and restarts;
+  five consecutive crashes pause the service and log why, instead of leaving
+  it running but inert.
 - The tray tooltip tracks the real state (`运行中` / `已暂停` / `录制中`) even
   with the menu closed, and the menu opens with a greyed-out status line such
   as `B 档 · 绝对 · 运行中 · 手掌 34px`.

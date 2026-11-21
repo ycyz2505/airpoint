@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 import time
+from tkinter import TclError
 
 from . import cursorsize
 from . import startup
@@ -87,7 +88,6 @@ def _message(text: str) -> None:
     try:
         import tkinter as tk
         from tkinter import messagebox
-
         root = tk.Tk()
         root.withdraw()
         messagebox.showinfo("OpticalInputSvc", text)
@@ -185,7 +185,7 @@ def main() -> None:
         root = hold_ring.root
         try:
             root.after(50, _poll_hold_ring)
-        except tk.TclError:
+        except TclError:
             pass
 
     ui.post(start_hold_ring)
@@ -208,7 +208,7 @@ def main() -> None:
         root = hud.root
         try:
             root.after(300, _poll_hud)
-        except tk.TclError:
+        except TclError:
             pass
 
     ui.post(start_hud)
@@ -293,7 +293,7 @@ def main() -> None:
                 toggle_bar(root)
             try:
                 root.after(200, poll)
-            except tk.TclError:
+            except TclError:
                 pass
 
         poll()
