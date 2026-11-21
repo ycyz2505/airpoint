@@ -44,6 +44,7 @@ class Controller:
         self._scroll_dir = 1
         self._scroll_time = 0.0
         self._v_since = 0.0
+        self._proc_ms = 0.0
         self._frame_index = 0
         self._last_mode = ""
         self._inside = False
@@ -115,6 +116,10 @@ class Controller:
     @property
     def inject_blocked(self) -> bool:
         return self._inject_blocked
+
+    @property
+    def tier(self) -> str:
+        return self._tier.current
 
     def take_bar_request(self) -> bool:
         """True once per two-hand request to toggle the control bar."""
@@ -428,6 +433,7 @@ class Controller:
                 continue
 
             height, width = frame.shape[:2]
+            frame_time = time.time()
             analysis_width = 1280 if level == 0 else 960
             if width > analysis_width:
                 scale = analysis_width / float(width)
@@ -441,6 +447,7 @@ class Controller:
 
             wrist = pose.process(small)
             now = time.time()
+            self._proc_ms = self._proc_ms * 0.9 + (now - frame_time) * 100.0
             calibrating = self._calibrating.is_set()
 
             self._seen.append(1 if wrist is not None else 0)
@@ -744,6 +751,7 @@ class Controller:
                 f"{fps:.1f}",
                 f"{self.governor.cpu:.1f}",
                 f"{self.governor.rss_mb:.0f}",
+                f"{self._proc_ms:.1f}",
             ))
 
             if (
@@ -809,6 +817,7 @@ class Controller:
                         ),
                         "drop": drop,
                         "shoulder": shoulder,
+                        "proc_ms": self._proc_ms,
                         "body": pose.bounds(),
                         "mode": mode,
                         "inside": inside,

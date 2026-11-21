@@ -401,6 +401,7 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"性能：{stats.get('perf', 'L0 全质量')}    "
             f"CPU：{stats.get('cpu', 0.0):.1f}%    "
             f"内存：{stats.get('rss', 0.0):.0f} MB    "
+            f"单帧：{stats.get('proc_ms', 0.0):.0f} ms    "
             f"书写：{'是' if stats.get('writing') else '否'}    "
             f"演示：{'是' if stats.get('presentation') else '否'}"
         )

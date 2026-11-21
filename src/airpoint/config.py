@@ -116,6 +116,7 @@ DEFAULTS = {
         "hold_ring": True,
         "two_hand_bar": True,
         "two_hand_hold_ms": 1500,
+        "tier_toast": True,
         "big_cursor": False,
         "big_cursor_size": 3,
         "magnifier": False,

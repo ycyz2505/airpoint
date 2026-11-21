@@ -121,7 +121,8 @@ automatic updates.
   a right click is not a surprise; toggle with **长按进度环**.
 - Screen HUD: an optional click-through overlay draws the mapping box and a
   `暂停` / `录制` badge over the desktop, readable from the back of the room
-  (**屏幕上显示映射框**).
+  (**屏幕上显示映射框**), and flashes the new tier for two seconds when it
+  changes (**档位变化提示**).
 - Control bar additions: **标定**, **急停**, and **退出**, so a lesson can be
   recovered without the tray; **档位** and **手势** cycle the tier lock and the
   click gesture in place.

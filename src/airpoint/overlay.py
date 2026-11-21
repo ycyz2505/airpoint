@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import tkinter as tk
 
 import cv2
@@ -316,7 +317,10 @@ class ScreenHud:
         self._canvas = None
         self._box = None
         self._badge = None
+        self._tier = None
         self._text = ""
+        self._tier_text = ""
+        self._tier_until = 0.0
         self._shown = False
 
     def _build(self) -> None:
@@ -345,6 +349,10 @@ class ScreenHud:
         )
         self._badge = canvas.create_text(
             24, 24, anchor="nw", text="", fill="#ffb400",
+            font=("Microsoft YaHei UI", 20, "bold"), state="hidden",
+        )
+        self._tier = canvas.create_text(
+            screen_w - 24, 24, anchor="ne", text="", fill="#00d4ff",
             font=("Microsoft YaHei UI", 20, "bold"), state="hidden",
         )
         win.update_idletasks()
@@ -390,10 +398,28 @@ class ScreenHud:
                     state="normal" if text else "hidden",
                 )
 
-            if (draw_box or text) and not self._shown:
+            if bool(self.config.get("overlay.tier_toast", True)):
+                tier = str(getattr(self.controller, "tier", "") or "")
+                if tier and tier != self._tier_text and not self._tier_until:
+                    self._tier_until = time.monotonic() + 2.0
+                if tier != self._tier_text:
+                    self._tier_text = tier
+                if self._tier_until and time.monotonic() >= self._tier_until:
+                    self._tier_until = 0.0
+                showing = bool(self._tier_until) and bool(tier)
+                self._canvas.itemconfigure(
+                    self._tier,
+                    text=f"档位 {tier}",
+                    state="normal" if showing else "hidden",
+                )
+            else:
+                self._tier_until = 0.0
+                self._canvas.itemconfigure(self._tier, state="hidden")
+
+            if (draw_box or text or self._tier_until) and not self._shown:
                 self.win.deiconify()
                 self._shown = True
-            elif not draw_box and not text and self._shown:
+            elif not draw_box and not text and not self._tier_until and self._shown:
                 self.win.withdraw()
                 self._shown = False
         except tk.TclError:
@@ -425,7 +451,8 @@ def draw_status(frame, stats: dict) -> None:
     )
     text = (
         f"{state}  {stats.get('mode', '')}  tier {stats.get('tier', '-')}  "
-        f"{stats.get('fps', 0.0):.1f} fps  {stats.get('perf', '')}"
+        f"{stats.get('fps', 0.0):.1f} fps  {stats.get('perf', '')}  "
+        f"{stats.get('proc_ms', 0.0):.0f} ms"
     )
     if stats.get("presentation"):
         text = "DEMO  " + text

@@ -9,7 +9,7 @@ from pathlib import Path
 COLUMNS = (
     "t", "frame", "tier", "band", "palm_px", "drop", "wrist_conf",
     "gesture", "state", "mode", "inside", "cursor_x", "cursor_y",
-    "fps", "cpu", "rss_mb",
+    "fps", "cpu", "rss_mb", "proc_ms",
 )
 
 
