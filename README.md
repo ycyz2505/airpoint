@@ -42,6 +42,8 @@ updates.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `F12` emergency stop.
+- Preview/diagnostics window with the camera image, pose skeleton, wrist hit
+  rate, and live tuning stats.
 - All mouse buttons are released on pause, exit, or error.
 
 ## Settings

@@ -12,6 +12,11 @@ class PoseTracker:
         self.log = log
         self._pose = None
         self._failed = False
+        self.last_landmarks = None
+
+    @property
+    def ready(self) -> bool:
+        return self._pose is not None
 
     def _ensure(self) -> bool:
         if self._pose is not None:
@@ -49,8 +54,10 @@ class PoseTracker:
             return None
 
         if not result.pose_landmarks:
+            self.last_landmarks = None
             return None
 
+        self.last_landmarks = result.pose_landmarks.landmark
         hand = str(self.config.get("pointer.hand", "right")).lower()
         index = self.LEFT_WRIST if hand == "left" else self.RIGHT_WRIST
         landmark = result.pose_landmarks.landmark[index]
@@ -66,3 +73,22 @@ class PoseTracker:
             except Exception:
                 pass
             self._pose = None
+
+    def draw(self, frame) -> None:
+        landmarks = self.last_landmarks
+        if not landmarks:
+            return
+        height, width = frame.shape[:2]
+
+        def point(index: int) -> tuple[int, int]:
+            item = landmarks[index]
+            return int(item.x * width), int(item.y * height)
+
+        for a, b in ((11, 13), (13, 15), (12, 14), (14, 16), (11, 12)):
+            cv2.line(frame, point(a), point(b), (0, 200, 255), 2)
+        for index in (11, 12, 13, 14, 15, 16):
+            cv2.circle(frame, point(index), 4, (0, 255, 0), -1)
+
+        hand = str(self.config.get("pointer.hand", "right")).lower()
+        wrist = self.LEFT_WRIST if hand == "left" else self.RIGHT_WRIST
+        cv2.circle(frame, point(wrist), 10, (0, 0, 255), 2)

@@ -12,9 +12,10 @@ from .pose import PoseTracker
 
 
 class Controller:
-    def __init__(self, config, log):
+    def __init__(self, config, log, preview=None):
         self.config = config
         self.log = log
+        self.preview = preview
         self._thread = None
         self._stop = threading.Event()
         self._active = threading.Event()
@@ -22,6 +23,7 @@ class Controller:
         self._reload_camera = threading.Event()
         self._lock = threading.Lock()
         self._last_fps_log = 0.0
+        self._window_start = 0.0
         self._frames = 0
         self._hits = 0
 
@@ -68,6 +70,8 @@ class Controller:
         pose = PoseTracker(self.config, self.log)
         pointer = RelativePointer(self.config)
         last_hit = 0.0
+        last_preview = 0.0
+        self._window_start = time.time()
 
         while not self._stop.is_set():
             if not self._active.is_set():
@@ -86,6 +90,7 @@ class Controller:
                 self._frames = 0
                 self._hits = 0
                 last_hit = 0.0
+                self._window_start = time.time()
 
             if not camera.opened:
                 if not camera.open():
@@ -124,13 +129,50 @@ class Controller:
                     x, y = inject.get_cursor()
                     inject.set_cursor(x + dx, y + dy)
 
+            elapsed = max(0.5, now - self._window_start)
+            fps = self._frames / elapsed
+            hit = 100.0 * self._hits / max(1, self._frames)
+
+            if (
+                self.preview is not None
+                and self.preview.enabled
+                and now - last_preview >= 0.1
+            ):
+                last_preview = now
+                height0, width0 = frame.shape[:2]
+                preview_w = 640
+                preview_h = max(1, int(height0 * preview_w / max(1, width0)))
+                preview_frame = cv2.resize(
+                    frame,
+                    (preview_w, preview_h),
+                    interpolation=cv2.INTER_AREA,
+                )
+                pose.draw(preview_frame)
+                self.preview.publish(
+                    preview_frame,
+                    {
+                        "active": self._active.is_set(),
+                        "width": camera.width,
+                        "height": camera.height,
+                        "fps": fps,
+                        "hit": hit,
+                        "pose": pose.ready,
+                        "hand": str(
+                            self.config.get("pointer.hand", "right")
+                        ),
+                        "gain": float(
+                            self.config.get("pointer.gain_relative", 1.8)
+                        ),
+                        "wrist_conf": wrist[2] if wrist else 0.0,
+                    },
+                )
+
             if now - self._last_fps_log >= 5.0:
                 self._last_fps_log = now
-                fps = self._frames / 5.0
-                hit = 100.0 * self._hits / max(1, self._frames)
                 self.log(f"fps {fps:.1f} wrist {hit:.0f}%")
                 self._frames = 0
                 self._hits = 0
+                self._window_start = now
 
         camera.close()
         pose.close()

@@ -11,6 +11,7 @@ from .controller import Controller
 from .hotkeys import Hotkeys
 from .logging_util import make_logger
 from .paths import data_dir, log_dir, updates_dir
+from .preview import PreviewBus, open_preview
 from .security import Security
 from .tray import create_icon
 from .ui import UiThread, ask_new_password, ask_password, open_settings, show_error
@@ -58,7 +59,7 @@ def main() -> None:
     log = make_logger("app")
     log(f"start {__version__}")
 
-    controller = Controller(config, log)
+    controller = Controller(config, log, preview=PreviewBus())
     controller.start()
 
     ui = UiThread()
@@ -110,6 +111,14 @@ def main() -> None:
             )
         )
 
+    def on_preview() -> None:
+        ui.post(
+            lambda root: locked(
+                root,
+                lambda: open_preview(root, controller.preview, controller),
+            )
+        )
+
     def do_exit() -> None:
         controller.stop()
         if icon is not None:
@@ -128,6 +137,7 @@ def main() -> None:
 
     icon = create_icon(
         on_toggle,
+        on_preview,
         on_settings,
         on_check,
         on_exit,
