@@ -131,6 +131,11 @@ automatic updates.
 - Big cursor: **大光标** raises the Windows cursor size for the session
   (1–8x) so it is visible from the back row, and the previous size is put back
   on exit. The cursor is never hidden or redrawn.
+- Scrolling: the cursor keeps scrolling while the hand pushes into the top or
+  bottom 5 % of the screen, in both mapping modes. In the near tiers a V sign
+  (index and middle up, ring and pinky down) scrolls one notch every 0.6 s,
+  with the direction taken from which fingertip is higher. Both are switches
+  (**贴边滚动**, **近距 V 字手势滚动**).
 - Elevated windows: when Windows refuses injected input (a UIPI-blocked
   window), the status line and HUD say so instead of failing silently.
 

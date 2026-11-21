@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections import deque
@@ -41,6 +42,8 @@ class Controller:
         self._carry_y = 0.0
         self._scroll_acc = 0.0
         self._scroll_dir = 1
+        self._scroll_time = 0.0
+        self._v_since = 0.0
         self._frame_index = 0
         self._last_mode = ""
         self._inside = False
@@ -171,6 +174,68 @@ class Controller:
         target = self._diag.export(path, folder=log_dir())
         self.log(f"diagnostics written: {target} ({len(self._diag)} rows)")
         return target
+
+    def _edge_scroll(self, y: float, dy: float, screen_h: int, now: float) -> None:
+        """Scroll while the hand keeps pushing into the top or bottom band."""
+        if not bool(self.config.get("pointer.edge_scroll", True)):
+            self._scroll_acc = 0.0
+            return
+        edge = max(8, int(screen_h * 0.05))
+        if dy < 0 and y <= edge:
+            direction = 1
+            self._scroll_acc += -dy
+        elif dy > 0 and y >= screen_h - edge:
+            direction = -1
+            self._scroll_acc += dy
+        else:
+            direction = 0
+            self._scroll_acc = 0.0
+        if direction and direction != self._scroll_dir:
+            self._scroll_acc = 0.0
+        if not direction:
+            return
+        if now - self._scroll_time < 0.3:
+            return
+        self._scroll_dir = direction
+        if self._scroll_acc < 40.0:
+            return
+        self._scroll_acc = 0.0
+        self._scroll_time = now
+        inject.wheel(120 * self._scroll_dir)
+
+    def _v_scroll(self, tier_name: str, landmarks, now: float) -> bool:
+        """Near tiers can scroll with a V sign: index and middle extended."""
+        if not bool(self.config.get("pointer.v_scroll", True)):
+            return False
+        if tier_name not in ("A", "B"):
+            return False
+        if not landmarks or len(landmarks) < 21:
+            return False
+        palm = max(1e-6, math.dist(landmarks[0], landmarks[9]))
+        index = math.dist(landmarks[8], landmarks[0]) / palm
+        middle = math.dist(landmarks[12], landmarks[0]) / palm
+        ring = math.dist(landmarks[16], landmarks[0]) / palm
+        pinky = math.dist(landmarks[20], landmarks[0]) / palm
+        spread = math.dist(landmarks[8], landmarks[12]) / palm
+        sign = (
+            index > 1.8
+            and middle > 1.8
+            and ring < 1.5
+            and pinky < 1.5
+            and spread > 0.6
+        )
+        if not sign:
+            self._v_since = 0.0
+            return False
+        if not self._v_since:
+            self._v_since = now
+            return False
+        if now - self._v_since < 0.6 or now - self._scroll_time < 0.3:
+            return False
+        self._v_since = now
+        self._scroll_time = now
+        inject.wheel(-120 if landmarks[8][1] < landmarks[12][1] else 120)
+        return True
 
     def _button(self, name: str, down: bool, now: float) -> None:
         """Send a button event, noting when Windows refused it.
@@ -456,6 +521,16 @@ class Controller:
                         sum(lm[i][1] for i in (0, 5, 9, 13, 17)) / 5.0,
                     )
 
+            if (
+                self._active.is_set()
+                and not calibrating
+                and gestures.state == "Idle"
+                and moving_result
+            ):
+                self._v_scroll(tier_state.name, moving_result.get("landmarks"), now)
+            else:
+                self._v_since = 0.0
+
             box = self.config.get("pointer.box", [])
             if not isinstance(box, list) or len(box) != 4:
                 box = []
@@ -550,7 +625,9 @@ class Controller:
                                 cx, cy = self._stroke.update(cx, cy, True)
                             else:
                                 self._stroke.reset()
+                            moved = cy - inject.get_cursor()[1]
                             inject.set_cursor(cx, cy)
+                            self._edge_scroll(cy, moved, screen_h, now)
                 else:
                     if not self._inside:
                         pointer.reset()
@@ -582,24 +659,7 @@ class Controller:
                                 -1.0, min(1.0, target_y - next_y)
                             )
 
-                        edge = max(8, int(screen_h * 0.05))
-                        if dy < 0 and next_y <= edge:
-                            direction = 1
-                            self._scroll_acc += -dy
-                        elif dy > 0 and next_y >= screen_h - edge:
-                            direction = -1
-                            self._scroll_acc += dy
-                        else:
-                            direction = 0
-                            self._scroll_acc = 0.0
-
-                        if direction and direction != self._scroll_dir:
-                            self._scroll_acc = 0.0
-                        if direction:
-                            self._scroll_dir = direction
-                            while self._scroll_acc >= 40.0:
-                                inject.wheel(120 * self._scroll_dir)
-                                self._scroll_acc -= 40.0
+                        self._edge_scroll(next_y, dy, screen_h, now)
 
             self._inside = inside
 

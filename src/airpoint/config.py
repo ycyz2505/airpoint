@@ -82,6 +82,8 @@ DEFAULTS = {
         "write_mode": True,
         "write_smoothing": 0.35,
         "write_min_step_px": 1.5,
+        "edge_scroll": True,
+        "v_scroll": True,
         "box": [],
         "calibration": [],
         "calibration_size": [],
