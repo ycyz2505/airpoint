@@ -15,12 +15,13 @@ def _image() -> Image.Image:
     return image
 
 
-def create_icon(on_check, on_exit) -> pystray.Icon:
+def create_icon(on_settings, on_check, on_exit) -> pystray.Icon:
     return pystray.Icon(
         "OpticalInputSvc",
         _image(),
         "OpticalInputSvc · 运行中",
         menu=pystray.Menu(
+            pystray.MenuItem("设置…", lambda: on_settings()),
             pystray.MenuItem("检查更新", lambda: on_check()),
             pystray.MenuItem("退出", lambda: on_exit()),
         ),

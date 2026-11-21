@@ -36,6 +36,14 @@ signature, then the app restarts itself to apply it. A failed start rolls back
 to the previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic
 updates.
 
+## Settings
+
+The tray menu's **设置…** and **退出** require the management password set on
+first run. Settings cover update, startup, performance, camera, tiers,
+pointer, gestures, overlay, hotkeys, recording, and about. The password is
+stored as a PBKDF2-HMAC-SHA256 hash; five failures lock the menu for 30
+seconds.
+
 ## Build
 
 GitHub Actions builds and publishes on every push to `main`; no local build is

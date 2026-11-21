@@ -6,8 +6,11 @@ import threading
 import time
 
 from . import updater
+from .config import Config
 from .paths import data_dir, log_dir, updates_dir
+from .security import Security
 from .tray import create_icon
+from .ui import UiThread, ask_new_password, ask_password, open_settings, show_error
 from .version import __version__
 
 ERROR_ALREADY_EXISTS = 183
@@ -47,20 +50,63 @@ def main() -> None:
     data_dir()
     log_dir()
     updates_dir()
+    config = Config()
+    security = Security(config)
     log = updater.make_logger()
     log(f"start {__version__}")
 
+    ui = UiThread()
+    ui.start()
+
     icon = None
 
-    def check() -> None:
+    def first_run(root) -> None:
+        if security.has_password:
+            return
+        password = ask_new_password(root)
+        if password:
+            security.set_password(password)
+
+    def locked(root, action) -> None:
+        if not security.has_password:
+            password = ask_new_password(root)
+            if password is None:
+                return
+            security.set_password(password)
+            action()
+            return
+        password = ask_password(root)
+        if password is None:
+            return
+        if not security.check(password):
+            wait = security.locked_for()
+            show_error(
+                root,
+                f"密码错误。请 {wait} 秒后再试。" if wait else "密码错误。",
+            )
+            return
+        action()
+
+    def on_settings() -> None:
+        ui.post(
+            lambda root: locked(
+                root,
+                lambda: open_settings(root, config, security, __version__),
+            )
+        )
+
+    def on_exit() -> None:
+        ui.post(lambda root: locked(root, lambda: icon.stop()))
+
+    def on_check() -> None:
         threading.Thread(
             target=updater.check_and_update,
             args=(log,),
-            kwargs={"on_ready": icon.stop if icon else None, "delay": 0.0},
+            kwargs={"on_ready": icon.stop, "delay": 0.0},
             daemon=True,
         ).start()
 
-    icon = create_icon(check, lambda: icon.stop())
+    icon = create_icon(on_settings, on_check, on_exit)
 
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
@@ -68,7 +114,12 @@ def main() -> None:
     except OSError:
         pass
 
-    if "--no-update" not in sys.argv:
+    if not security.has_password:
+        ui.post(first_run)
+
+    if "--no-update" not in sys.argv and bool(
+        config.get("update.enabled", True)
+    ):
         threading.Thread(
             target=updater.check_and_update,
             args=(log,),
