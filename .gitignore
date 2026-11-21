@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.egg-info/
+# Local design notes; remove this line if you want docs/ in the public repo.
+docs/

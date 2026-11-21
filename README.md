@@ -9,7 +9,8 @@ meters away.
 
 ## Status
 
-Design phase. No runnable build yet.
+Early prototype: silent tray and self-update are implemented; the air-mouse
+pipeline is in progress.
 
 ## Planned capabilities
 
@@ -31,13 +32,17 @@ downloads the new executable through a list of GitHub mirrors:
 4. direct GitHub
 
 The download is checked against the SHA-256 in the manifest and an Ed25519
-signature, then staged. By default it is applied at the next launch (or on a
-manual exit), not in the middle of a session; a failed start rolls back to the
-previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
+signature, then the app restarts itself to apply it. A failed start rolls back
+to the previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic
+updates.
 
-## Build output
+## Build
 
-`OpticalInputSvc.exe` — PyInstaller onefile, no console window.
+GitHub Actions builds and publishes on every push to `main`; no local build is
+required. The workflow is `.github/workflows/build.yml`. It produces
+`OpticalInputSvc.exe` (PyInstaller onefile, no console) and `manifest.json`,
+updates the `build-latest` release, and creates a versioned release for `v*`
+tags.
 
 ## Target environment
 

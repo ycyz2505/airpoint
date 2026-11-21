@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+from .paths import exe_path, log_dir, updates_dir
+from .update_pubkey import PUBLIC_KEY_B64
+from .version import __version__
+
+REPO = "ycyz2505/airpoint"
+MANIFEST_URL = (
+    f"https://github.com/{REPO}/releases/download/build-latest/manifest.json"
+)
+ACCELERATORS = (
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "",
+)
+USER_AGENT = "OpticalInputSvc-updater/1.0"
+MANIFEST_TIMEOUT = 8
+ASSET_TIMEOUT = 120
+MANIFEST_MAX = 1024 * 1024
+ASSET_MAX = 64 * 1024 * 1024
+
+
+def make_logger():
+    path = log_dir() / "update.log"
+
+    def log(message: str) -> None:
+        line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {message}\n"
+        try:
+            if path.exists() and path.stat().st_size > 200 * 1024:
+                path.unlink()
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
+        except OSError:
+            pass
+
+    return log
+
+
+def _proxy_handler() -> urllib.request.ProxyHandler:
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Internet Settings",
+        ) as key:
+            enabled, _ = winreg.QueryValueEx(key, "ProxyEnable")
+            if not enabled:
+                return urllib.request.ProxyHandler({})
+            server, _ = winreg.QueryValueEx(key, "ProxyServer")
+    except Exception:
+        return urllib.request.ProxyHandler({})
+
+    if not server:
+        return urllib.request.ProxyHandler({})
+    if "=" in server:
+        parts = dict(
+            item.split("=", 1) for item in server.split(";") if "=" in item
+        )
+        http = parts.get("http") or parts.get("https") or ""
+        https = parts.get("https") or parts.get("http") or ""
+        return urllib.request.ProxyHandler({"http": http, "https": https})
+    return urllib.request.ProxyHandler({"http": server, "https": server})
+
+
+def _fetch(url: str, timeout: int, max_bytes: int) -> bytes:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": USER_AGENT, "Cache-Control": "no-cache"},
+    )
+    opener = urllib.request.build_opener(_proxy_handler())
+    with opener.open(request, timeout=timeout) as response:
+        status = getattr(response, "status", 200)
+        if status < 200 or status >= 300:
+            raise OSError(f"HTTP {status}")
+        chunks = []
+        total = 0
+        while True:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise OSError("response too large")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _sources(url: str):
+    for prefix in ACCELERATORS:
+        yield prefix + url
+
+
+def _fetch_manifest(log):
+    errors = []
+    for candidate in _sources(MANIFEST_URL):
+        try:
+            raw = _fetch(candidate, MANIFEST_TIMEOUT, MANIFEST_MAX)
+            data = json.loads(raw.decode("utf-8"))
+            if not isinstance(data.get("airpoint"), dict):
+                raise ValueError("manifest missing 'airpoint'")
+            log(f"manifest ok: {candidate}")
+            return data
+        except Exception as exc:
+            errors.append(f"{candidate}: {exc}")
+            log(f"manifest fail: {candidate}: {exc}")
+    raise OSError("; ".join(errors[-3:]))
+
+
+def _version_tuple(value: str):
+    parts = [int(item) for item in re.findall(r"\d+", value)[:4]]
+    while len(parts) < 4:
+        parts.append(0)
+    return tuple(parts)
+
+
+def _is_newer(remote: str, current: str) -> bool:
+    return _version_tuple(remote) > _version_tuple(current)
+
+
+def _canonical(entry: dict) -> bytes:
+    return json.dumps(
+        entry, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+
+
+def _verify_signature(entry: dict, signature: str) -> bool:
+    if not PUBLIC_KEY_B64:
+        return True
+    if not signature:
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+            Ed25519PublicKey,
+        )
+
+        public_key = Ed25519PublicKey.from_public_bytes(
+            base64.b64decode(PUBLIC_KEY_B64)
+        )
+        public_key.verify(base64.b64decode(signature), _canonical(entry))
+        return True
+    except Exception:
+        return False
+
+
+def _download(entry: dict, log) -> bytes:
+    url = str(entry.get("url") or "")
+    if not url:
+        raise ValueError("manifest missing url")
+    expected = str(entry.get("sha256") or "").lower()
+    expected_size = entry.get("size")
+    errors = []
+    for candidate in _sources(url):
+        try:
+            data = _fetch(candidate, ASSET_TIMEOUT, ASSET_MAX)
+            actual = hashlib.sha256(data).hexdigest()
+            if expected and actual != expected:
+                raise ValueError(f"sha256 mismatch ({actual})")
+            if isinstance(expected_size, int) and expected_size:
+                if len(data) != expected_size:
+                    raise ValueError("size mismatch")
+            log(f"asset ok: {candidate}")
+            return data
+        except Exception as exc:
+            errors.append(f"{candidate}: {exc}")
+            log(f"asset fail: {candidate}: {exc}")
+    raise OSError("; ".join(errors[-3:]))
+
+
+def _write_batch(target: Path, new: Path, pid: int, marker: Path) -> Path:
+    path = updates_dir() / f"update-{pid}.bat"
+    script = f"""@echo off
+setlocal
+:wait
+tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul
+if not errorlevel 1 (
+  ping -n 2 127.0.0.1 >nul
+  goto wait
+)
+if exist "{target}.bak" del /f /q "{target}.bak" >nul 2>nul
+move /y "{target}" "{target}.bak" >nul 2>nul
+move /y "{new}" "{target}" >nul 2>nul
+if errorlevel 1 (
+  move /y "{target}.bak" "{target}" >nul 2>nul
+  exit /b 1
+)
+start "" "{target}"
+ping -n 31 127.0.0.1 >nul
+if exist "{marker}" (
+  del /f /q "{target}.bak" >nul 2>nul
+) else (
+  taskkill /IM "{target.name}" /F >nul 2>nul
+  move /y "{target}.bak" "{target}" >nul 2>nul
+  start "" "{target}"
+)
+del "%~f0"
+"""
+    path.write_text(script, encoding="utf-8")
+    return path
+
+
+def check_and_update(log, on_ready=None, delay: float = 3.0) -> None:
+    if not getattr(sys, "frozen", False):
+        log("not frozen; update disabled")
+        return
+    if os.environ.get("OPTICALINPUT_NO_UPDATE"):
+        log("update disabled by OPTICALINPUT_NO_UPDATE")
+        return
+    if (Path(__file__).resolve().parents[2] / ".dev").exists():
+        log("dev marker; update disabled")
+        return
+    if delay:
+        time.sleep(delay)
+    log(f"checking; current {__version__}")
+    try:
+        manifest = _fetch_manifest(log)
+        entry = manifest["airpoint"]
+        remote = str(entry.get("version") or "")
+        if not remote or not _is_newer(remote, __version__):
+            log(f"up to date ({remote or __version__})")
+            return
+        if not _verify_signature(entry, str(manifest.get("signature") or "")):
+            log("signature invalid; refusing update")
+            return
+        data = _download(entry, log)
+        target = exe_path()
+        new = target.with_name(target.stem + "-new.exe")
+        new.write_bytes(data)
+        marker = updates_dir() / f"started-{remote}.ok"
+        batch = _write_batch(target, new, os.getpid(), marker)
+        log(f"staged {remote}; restarting")
+        if on_ready is not None:
+            on_ready()
+        subprocess.Popen(
+            ["cmd.exe", "/C", str(batch)],
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        time.sleep(0.5)
+        os._exit(0)
+    except Exception as exc:
+        log(f"update failed: {exc}")
