@@ -10,7 +10,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from .paths import exe_path, log_dir, updates_dir
+from .paths import exe_path, updates_dir
 from .version import __version__
 
 REPO = "ycyz2505/airpoint"
@@ -28,22 +28,6 @@ MANIFEST_TIMEOUT = 8
 ASSET_TIMEOUT = 600
 MANIFEST_MAX = 1024 * 1024
 ASSET_MAX = 256 * 1024 * 1024
-
-
-def make_logger():
-    path = log_dir() / "update.log"
-
-    def log(message: str) -> None:
-        line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {message}\n"
-        try:
-            if path.exists() and path.stat().st_size > 200 * 1024:
-                path.unlink()
-            with path.open("a", encoding="utf-8") as handle:
-                handle.write(line)
-        except OSError:
-            pass
-
-    return log
 
 
 def _proxy_handler() -> urllib.request.ProxyHandler:
@@ -222,8 +206,24 @@ if exist "{marker}" (
 )
 del "%~f0"
 """
-    path.write_text(script, encoding="utf-8")
+    # cmd.exe reads a .bat in the console ANSI codepage, not UTF-8, so a
+    # non-ASCII install path would be mangled by an utf-8 write.
+    try:
+        path.write_text(script, encoding="mbcs")
+    except (LookupError, UnicodeEncodeError):
+        path.write_text(script, encoding="utf-8")
     return path
+
+
+def _leave_cleanly() -> None:
+    """Drop any held button before the process vanishes mid-press."""
+    try:
+        from . import inject
+
+        inject.release_all()
+    except Exception:
+        pass
+    os._exit(0)
 
 
 def staged_path() -> Path:
@@ -262,7 +262,7 @@ def apply_staged(log) -> bool:
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     time.sleep(0.5)
-    os._exit(0)
+    _leave_cleanly()
 
 
 def check_and_update(
@@ -312,6 +312,6 @@ def check_and_update(
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
         time.sleep(0.5)
-        os._exit(0)
+        _leave_cleanly()
     except Exception as exc:
         log(f"update failed: {exc}")
