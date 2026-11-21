@@ -59,6 +59,12 @@ updates.
   small. Manual lock and advisory-only mode are available.
 - Seat profiles: save and load the box, five-point calibration, feel settings,
   tier lock, gestures, and camera settings. The last profile loads at startup.
+- Physical mouse takeover: moving the real mouse pauses the air cursor and it
+  resumes after 3 seconds of mouse inactivity; a hotkey or tray toggle cancels
+  the automatic resume.
+- Manual recording from the tray: the controller stops cursor work and writes
+  the raw camera stream to `recordings/rec-*.avi` (MJPG) after checking free
+  disk space.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

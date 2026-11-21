@@ -10,6 +10,7 @@ from .config import Config
 from .controller import Controller
 from .hotkeys import Hotkeys
 from .logging_util import make_logger
+from .mousehook import MouseHook, MousePause
 from .paths import data_dir, log_dir, updates_dir
 from .preview import PreviewBus, open_preview
 from .profiles import ProfileStore
@@ -63,6 +64,11 @@ def main() -> None:
 
     controller = Controller(config, log, preview=PreviewBus())
     controller.start()
+    mouse_pause = MousePause(
+        controller,
+        log,
+        float(config.get("pointer.mouse_pause_sec", 3)),
+    )
 
     ui = UiThread()
     ui.start()
@@ -97,6 +103,7 @@ def main() -> None:
         action()
 
     def on_toggle() -> None:
+        mouse_pause.cancel()
         controller.set_active(not controller.active)
 
     def on_settings() -> None:
@@ -124,6 +131,7 @@ def main() -> None:
         )
 
     def do_exit() -> None:
+        mouse_pause.cancel()
         controller.stop()
         if icon is not None:
             icon.stop()
@@ -139,13 +147,21 @@ def main() -> None:
             daemon=True,
         ).start()
 
+    def on_record() -> None:
+        if controller.recording:
+            controller.stop_recording()
+        else:
+            controller.start_recording()
+
     icon = create_icon(
         on_toggle,
         on_preview,
         on_settings,
         on_check,
+        on_record,
         on_exit,
         lambda: controller.active,
+        lambda: controller.recording,
     )
 
     marker = updates_dir() / f"started-{__version__}.ok"
@@ -164,6 +180,9 @@ def main() -> None:
         lambda: controller.set_active(False),
     )
     hotkeys.start()
+
+    if bool(config.get("pointer.mouse_pause", True)):
+        MouseHook(log, mouse_pause.trigger).start()
 
     if bool(config.get("pointer.active_on_start", False)):
         controller.set_active(True)

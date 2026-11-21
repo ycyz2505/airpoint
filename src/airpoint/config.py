@@ -71,6 +71,8 @@ DEFAULTS = {
         "accel_max": 2.0,
         "rest_speed": 0.05,
         "active_on_start": False,
+        "mouse_pause": True,
+        "mouse_pause_sec": 3,
         "box": [],
         "calibration": [],
         "calibration_size": [],

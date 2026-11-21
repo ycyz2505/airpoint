@@ -42,6 +42,12 @@ def updates_dir() -> Path:
     return path
 
 
+def recordings_dir() -> Path:
+    path = data_dir() / "recordings"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def exe_path() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve()

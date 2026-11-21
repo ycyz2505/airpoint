@@ -12,6 +12,7 @@ from .gestures import GestureEngine
 from .hands import HandTracker
 from .pointer import AbsolutePointer, RelativePointer
 from .pose import PoseTracker
+from .recording import Recorder
 from .tiers import TierEngine
 
 
@@ -41,6 +42,9 @@ class Controller:
         self._tier = TierEngine(config, log)
         self._seen = deque(maxlen=60)
         self._last_palm_px = 0.0
+        self._recording = threading.Event()
+        self.recorder = Recorder(config, log)
+        self._record_path = None
 
     def start(self) -> None:
         with self._lock:
@@ -53,12 +57,15 @@ class Controller:
             self._thread.start()
 
     def stop(self) -> None:
+        self._recording.clear()
         self._stop.set()
         self._active.clear()
         with self._lock:
             thread = self._thread
         if thread is not None:
             thread.join(timeout=2.0)
+        if self.recorder.active:
+            self.recorder.stop()
         inject.release_all()
         self.log("controller stopped")
 
@@ -91,6 +98,25 @@ class Controller:
             self._reset.set()
             self.log("calibration end")
 
+    @property
+    def recording(self) -> bool:
+        return self._recording.is_set()
+
+    def start_recording(self) -> None:
+        if self._recording.is_set() or self._calibrating.is_set():
+            return
+        self._active.clear()
+        inject.release_all()
+        self._reset.set()
+        self._recording.set()
+        self.log("recording requested")
+
+    def stop_recording(self) -> None:
+        if not self._recording.is_set():
+            return
+        self._recording.clear()
+        self.log("recording stop requested")
+
     def _run(self) -> None:
         camera = Camera(self.config, self.log)
         pose = PoseTracker(self.config, self.log)
@@ -105,7 +131,9 @@ class Controller:
         self._window_start = time.time()
 
         while not self._stop.is_set():
-            if not self._active.is_set():
+            if not self._recording.is_set() and self.recorder.active:
+                self._record_path = self.recorder.stop()
+            if not self._active.is_set() and not self._recording.is_set():
                 if camera.opened:
                     camera.close()
                 time.sleep(0.1)
@@ -143,6 +171,86 @@ class Controller:
             frame = camera.read()
             if frame is None:
                 time.sleep(0.05)
+                continue
+
+            if self._recording.is_set():
+                if not self.recorder.active:
+                    if not self.recorder.start(frame, camera.fps or 30):
+                        self._recording.clear()
+                        self.log("recording failed")
+                        continue
+                self.recorder.write(frame)
+                self._frames += 1
+                now = time.time()
+                elapsed = max(0.5, now - self._window_start)
+                fps = self._frames / elapsed
+
+                if (
+                    self.preview is not None
+                    and self.preview.enabled
+                    and now - last_preview >= 0.1
+                ):
+                    last_preview = now
+                    height0, width0 = frame.shape[:2]
+                    preview_w = 640
+                    preview_h = max(
+                        1, int(height0 * preview_w / max(1, width0))
+                    )
+                    if preview_h > 360:
+                        preview_h = 360
+                        preview_w = max(
+                            1, int(width0 * preview_h / max(1, height0))
+                        )
+                    preview_frame = cv2.resize(
+                        frame,
+                        (preview_w, preview_h),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    self.preview.publish(
+                        preview_frame,
+                        {
+                            "active": False,
+                            "recording": True,
+                            "record_path": str(self.recorder.path or ""),
+                            "width": camera.width,
+                            "height": camera.height,
+                            "fps": fps,
+                            "hit": 0.0,
+                            "pose": False,
+                            "hands": False,
+                            "hand": str(
+                                self.config.get("pointer.hand", "right")
+                            ),
+                            "scheme": "record",
+                            "tier": "-",
+                            "tier_band": "-",
+                            "tier_applied": False,
+                            "hands_on": False,
+                            "palm_px": 0.0,
+                            "drop": 0.0,
+                            "mode": "recording",
+                            "inside": False,
+                            "calibrating": False,
+                            "calibrated": False,
+                            "palm_ok": False,
+                            "palm_x": 0.0,
+                            "palm_y": 0.0,
+                            "gain": 0.0,
+                            "wrist_conf": 0.0,
+                            "gesture": "recording",
+                            "state": "Recording",
+                            "pinch": False,
+                            "fist": False,
+                            "pinch_ratio": 0.0,
+                            "fist_ratio": 0.0,
+                        },
+                    )
+
+                if now - self._last_fps_log >= 5.0:
+                    self._last_fps_log = now
+                    self.log(f"record fps {fps:.1f}")
+                    self._frames = 0
+                    self._window_start = now
                 continue
 
             self._frames += 1

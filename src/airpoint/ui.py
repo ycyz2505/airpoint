@@ -141,6 +141,8 @@ SECTIONS = [
             ),
             ("pointer.hand", "手", "choice", ["right", "left"]),
             ("pointer.active_on_start", "启动即激活", "bool"),
+            ("pointer.mouse_pause", "鼠标一动就暂停", "bool"),
+            ("pointer.mouse_pause_sec", "暂停秒数", "int"),
             ("pointer.gain_relative", "相对增益", "float"),
             ("pointer.deadzone_px", "死区（px）", "float"),
             ("pointer.prediction_ms", "预测（ms）", "int"),

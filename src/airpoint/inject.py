@@ -13,6 +13,7 @@ user32.GetSystemMetrics.argtypes = [ctypes.c_int]
 user32.GetSystemMetrics.restype = ctypes.c_int
 
 INPUT_MOUSE = 0
+MOUSE_MARKER = 0x41505400
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
 MOUSEEVENTF_RIGHTDOWN = 0x0008
@@ -53,6 +54,7 @@ def _mouse(flags: int, data: int = 0) -> None:
     item.type = INPUT_MOUSE
     item.mi.dwFlags = flags
     item.mi.mouseData = data & 0xFFFFFFFF
+    item.mi.dwExtraInfo = MOUSE_MARKER
     user32.SendInput(1, ctypes.byref(item), ctypes.sizeof(INPUT))
 
 

@@ -5,6 +5,7 @@ import threading
 import cv2
 import tkinter as tk
 from PIL import Image, ImageTk
+from pathlib import Path
 from tkinter import messagebox, ttk
 
 from .calibrate import run_calibration
@@ -283,9 +284,19 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     def format_stats(stats: dict) -> str:
         if not stats:
             return "未激活 / 无画面"
+        status = "暂停"
+        if stats.get("recording"):
+            status = "录制中"
+        elif stats.get("active"):
+            status = "激活"
+        record = ""
+        path = stats.get("record_path")
+        if path:
+            record = f"    {Path(path).name}"
         return (
-            f"状态：{'激活' if stats.get('active') else '暂停'}"
-            f"{' · 标定中' if stats.get('calibrating') else ''}    "
+            f"状态：{status}"
+            f"{' · 标定中' if stats.get('calibrating') else ''}"
+            f"{record}    "
             f"摄像头：{stats.get('width', 0)}x{stats.get('height', 0)}    "
             f"FPS：{stats.get('fps', 0.0):.1f}    "
             f"手腕：{stats.get('hit', 0.0):.0f}%\n"
@@ -331,8 +342,10 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             last_seq = seq
 
         stats_var.set(format_stats(stats))
+        recording = bool(stats.get("recording"))
         toggle_button.configure(
-            text="暂停" if controller.active else "激活"
+            text="暂停" if controller.active else "激活",
+            state="disabled" if recording else "normal",
         )
         try:
             win.after(80, poll)

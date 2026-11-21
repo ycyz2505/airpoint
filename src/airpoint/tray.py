@@ -16,7 +16,14 @@ def _image() -> Image.Image:
 
 
 def create_icon(
-    on_toggle, on_preview, on_settings, on_check, on_exit, is_active
+    on_toggle,
+    on_preview,
+    on_settings,
+    on_check,
+    on_record,
+    on_exit,
+    is_active,
+    is_recording,
 ) -> pystray.Icon:
     return pystray.Icon(
         "OpticalInputSvc",
@@ -28,6 +35,12 @@ def create_icon(
                 lambda: on_toggle(),
             ),
             pystray.MenuItem("预览诊断…", lambda: on_preview()),
+            pystray.MenuItem(
+                lambda item: (
+                    "停止录制" if is_recording() else "开始录制"
+                ),
+                lambda: on_record(),
+            ),
             pystray.MenuItem("设置…", lambda: on_settings()),
             pystray.MenuItem("检查更新", lambda: on_check()),
             pystray.MenuItem("退出", lambda: on_exit()),
