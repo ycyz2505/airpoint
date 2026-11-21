@@ -204,6 +204,8 @@ SECTIONS = [
             ("gesture.pinch_exit", "捏合退出", "float"),
             ("gesture.fist_enter", "握拳进入", "float"),
             ("gesture.fist_exit", "握拳退出", "float"),
+            ("gesture.personalized", "个性化手势（kNN）", "bool"),
+            ("__train", "录制手势样本…", "action"),
         ],
     ),
     (
@@ -242,7 +244,9 @@ SECTIONS = [
 ]
 
 
-def open_settings(root, config, security, version: str, on_saved=None) -> None:
+def open_settings(
+    root, config, security, version: str, on_saved=None, controller=None
+) -> None:
     existing = getattr(root, "_settings_window", None)
     if existing is not None:
         try:
@@ -266,7 +270,7 @@ def open_settings(root, config, security, version: str, on_saved=None) -> None:
     for title, fields in SECTIONS:
         frame = ttk.Frame(notebook, padding=12)
         notebook.add(frame, text=title)
-        _build_fields(frame, config, fields, bindings)
+        _build_fields(frame, config, fields, bindings, controller)
 
     _build_security(notebook, config, security, bindings)
     _build_about(notebook, version)
@@ -329,7 +333,7 @@ def open_settings(root, config, security, version: str, on_saved=None) -> None:
     win.lift()
 
 
-def _build_fields(frame, config, fields, bindings) -> None:
+def _build_fields(frame, config, fields, bindings, controller=None) -> None:
     for row, field in enumerate(fields):
         key, label, kind = field[0], field[1], field[2]
         options = field[3] if len(field) > 3 else None
@@ -339,6 +343,13 @@ def _build_fields(frame, config, fields, bindings) -> None:
             row=row, column=0, sticky="w", padx=(0, 16), pady=6
         )
 
+        if kind == "action":
+            ttk.Button(
+                frame,
+                text=label,
+                command=lambda: _run_action(key, frame, controller),
+            ).grid(row=row, column=1, sticky="w", pady=6)
+            continue
         if kind == "bool":
             var = tk.BooleanVar(value=bool(value))
             ttk.Checkbutton(frame, variable=var).grid(
@@ -362,6 +373,20 @@ def _build_fields(frame, config, fields, bindings) -> None:
         bindings.append((key, kind, var))
 
     frame.columnconfigure(1, weight=1)
+
+
+def _run_action(key: str, frame, controller) -> None:
+    if key == "__train":
+        if controller is None:
+            messagebox.showinfo(
+                "OpticalInputSvc",
+                "手势样本需要在主程序里录制。",
+                parent=frame,
+            )
+            return
+        from .handtrain import open_trainer
+
+        open_trainer(frame.winfo_toplevel(), controller.preview, controller)
 
 
 def _build_security(notebook, config, security, bindings) -> None:

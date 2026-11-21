@@ -142,6 +142,12 @@ automatic updates.
   (**贴边滚动**, **近距 V 字手势滚动**).
 - Elevated windows: when Windows refuses injected input (a UIPI-blocked
   window), the status line and HUD say so instead of failing silently.
+- Personalized gestures: **录制手势样本…** in the gesture tab walks through
+  open / pinch / fist / point, 40 seconds each, and stores a scale-free
+  ten-number shape per sample. With **个性化手势（kNN）** on, the nearest
+  neighbours among those samples get a vote, so a user whose pinch never
+  crosses the fixed ratio still gets clicks. It stays off by default and only
+  overrides a gesture when its confidence is at least 0.7.
 
 ## Settings
 

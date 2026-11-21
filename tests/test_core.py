@@ -403,6 +403,12 @@ class WizardTests(unittest.TestCase):
 
 
 class CalibrationTests(unittest.TestCase):
+    def setUp(self):
+        try:
+            import cv2  # noqa: F401
+        except ImportError:
+            self.skipTest("opencv not installed")
+
     def _samples(self, outlier=False):
         import cv2
         import numpy as np
@@ -459,6 +465,79 @@ class CalibrationTests(unittest.TestCase):
             src[good].reshape(-1, 1, 2), matrix
         ).reshape(-1, 2)
         self.assertLess(float(np.abs(projected - dst[good]).max()), 2.0)
+
+
+class PersonalizeTests(unittest.TestCase):
+    def _hand(self, spread: float):
+        # Synthetic 21-point hand: landmark 0 at origin, 9 one unit up.
+        points = [(0.5, 0.5)] * 21
+        points[9] = (0.5, 0.5 - spread)
+        points[4] = (0.5 + spread, 0.5)
+        points[8] = (0.5 + spread * 2, 0.5)
+        points[12] = (0.5 + spread * 3, 0.5)
+        points[16] = (0.5 + spread * 4, 0.5)
+        points[20] = (0.5 + spread * 5, 0.5)
+        points[5] = (0.5, 0.5 - spread)
+        points[17] = (0.5, 0.5)
+        return points
+
+    def test_features_are_scale_free(self):
+        from airpoint.personalize import features
+
+        small = features(self._hand(0.02))
+        large = features(self._hand(0.04))
+        self.assertIsNotNone(small)
+        for a, b in zip(small, large):
+            self.assertAlmostEqual(a, b, places=6)
+
+    def test_needs_enough_samples(self):
+        import tempfile
+        from pathlib import Path
+
+        from airpoint.personalize import Personalizer
+
+        with tempfile.TemporaryDirectory() as folder:
+            model = Personalizer(Path(folder) / "g.json")
+            self.assertEqual(model.classify([1.0] * 10), {})
+            for _ in range(3):
+                model.add("open", [1.0] * 10)
+            self.assertEqual(model.classify([1.0] * 10), {})
+
+    def test_classifies_a_clear_cluster(self):
+        import tempfile
+        from pathlib import Path
+
+        from airpoint.personalize import Personalizer
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "g.json"
+            model = Personalizer(path)
+            for value in (0.9, 1.0, 1.1, 1.0):
+                model.add("open", [value] * 10)
+            for value in (0.1, 0.2, 0.15, 0.1):
+                model.add("fist", [value] * 10)
+            label, score = model.best([1.05] * 10)
+            self.assertEqual(label, "open")
+            self.assertGreater(score, 0.7)
+
+            reloaded = Personalizer(path)
+            self.assertEqual(len(reloaded), 0)
+            model.save()
+            reloaded = Personalizer(path)
+            self.assertEqual(len(reloaded), 8)
+            self.assertEqual(reloaded.best([0.1] * 10)[0], "fist")
+
+    def test_rejects_unknown_label(self):
+        import tempfile
+        from pathlib import Path
+
+        from airpoint.personalize import Personalizer
+
+        with tempfile.TemporaryDirectory() as folder:
+            model = Personalizer(Path(folder) / "g.json")
+            self.assertFalse(model.add("wave", [1.0] * 10))
+            self.assertFalse(model.add("open", [1.0] * 3))
+            self.assertEqual(len(model), 0)
 
 
 class SelfCalibrationTests(unittest.TestCase):

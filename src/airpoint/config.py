@@ -104,6 +104,7 @@ DEFAULTS = {
         "pinch_exit": 0.65,
         "fist_enter": 1.30,
         "fist_exit": 1.50,
+        "personalized": False,
     },
     "hands": {
         "model_complexity": 0,

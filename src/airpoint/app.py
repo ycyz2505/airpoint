@@ -318,6 +318,7 @@ def main() -> None:
                     security,
                     __version__,
                     on_saved=on_saved,
+                    controller=controller,
                 ),
             )
         )

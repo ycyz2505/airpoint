@@ -14,6 +14,7 @@ from .diagnostics import Diagnostics
 from .gestures import GestureEngine, TwoHandOpen
 from .hands import HandTracker
 from .paths import log_dir
+from .personalize import Personalizer, features
 from .pointer import AbsolutePointer, RelativePointer, map_point, safe_zone
 from .performance import Governor
 from .pose import PoseTracker
@@ -70,6 +71,7 @@ class Controller:
         self._inject_blocked = False
         self._blocked_log = 0.0
         self._diag = Diagnostics(1800)
+        self.personalizer = Personalizer()
 
     def start(self) -> None:
         with self._lock:
@@ -179,6 +181,24 @@ class Controller:
         target = self._diag.export(path, folder=log_dir())
         self.log(f"diagnostics written: {target} ({len(self._diag)} rows)")
         return target
+
+    def _personalize(self, result) -> None:
+        """Let recorded samples break ties the fixed thresholds cannot."""
+        if not result or not result.get("landmarks"):
+            return
+        if not bool(self.config.get("gesture.personalized", False)):
+            return
+        label, score = self.personalizer.best(
+            features(result.get("landmarks"))
+        )
+        if not label or score < 0.7:
+            return
+        name = "open" if label == "point" else label
+        result["personal"] = name
+        if name != result.get("gesture"):
+            result["gesture"] = name
+            result["pinch"] = name == "pinch"
+            result["fist"] = name == "fist"
 
     def _edge_scroll(self, y: float, dy: float, screen_h: int, now: float) -> None:
         """Scroll while the hand keeps pushing into the top or bottom band."""
@@ -500,6 +520,7 @@ class Controller:
                     self._last_palm_px = (
                         float(moving_result["palm"]) * width
                     )
+                self._personalize(moving_result)
 
             if hands_on and scheme == "double" and self.governor.hands_allowed():
                 click_wrist = pose.wrist(click_hand)
@@ -833,6 +854,14 @@ class Controller:
                             else None
                         ),
                         "body": pose.bounds(),
+                        "landmarks": (
+                            moving_result.get("landmarks")
+                            if moving_result
+                            else None
+                        ),
+                        "personal": bool(
+                            moving_result and moving_result.get("personal")
+                        ),
                         "mode": mode,
                         "inside": inside,
                         "calibrating": calibrating,
