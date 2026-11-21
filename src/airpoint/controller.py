@@ -11,9 +11,11 @@ from .capture import Camera
 from .gestures import GestureEngine
 from .hands import HandTracker
 from .pointer import AbsolutePointer, RelativePointer
+from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
 from .tiers import TierEngine
+from .writing import StrokeSmoother
 
 
 class Controller:
@@ -45,6 +47,9 @@ class Controller:
         self._recording = threading.Event()
         self.recorder = Recorder(config, log)
         self._record_path = None
+        self.governor = Governor(config, log)
+        self._stroke = StrokeSmoother(config)
+        self._paused_notice = False
 
     def start(self) -> None:
         with self._lock:
@@ -161,6 +166,8 @@ class Controller:
                 last_hit = 0.0
                 last_gesture_seen = 0.0
                 last_click_result = None
+                self._stroke.reset()
+                self._paused_notice = False
                 self._window_start = time.time()
 
             if not camera.opened:
@@ -255,12 +262,25 @@ class Controller:
 
             self._frames += 1
             self._frame_index += 1
+
+            level = self.governor.update(time.time())
+            if level >= 5:
+                if not self._paused_notice:
+                    self._paused_notice = True
+                    self.log("perf paused: resource limit")
+                inject.release_all()
+                self._active.clear()
+                continue
+            if level >= 1 and self._frame_index % self.governor.frame_divisor():
+                continue
+
             height, width = frame.shape[:2]
-            if width > 1280:
-                scale = 1280.0 / float(width)
+            analysis_width = 1280 if level == 0 else 960
+            if width > analysis_width:
+                scale = analysis_width / float(width)
                 small = cv2.resize(
                     frame,
-                    (1280, max(1, int(height * scale))),
+                    (analysis_width, max(1, int(height * scale))),
                     interpolation=cv2.INTER_AREA,
                 )
             else:
@@ -301,7 +321,7 @@ class Controller:
             moving_result = None
             click_result = None
 
-            if hands_on and wrist is not None:
+            if hands_on and wrist is not None and self.governor.hands_allowed():
                 moving_result = hands.process(
                     frame, wrist, pose.elbow(moving_hand), moving_hand
                 )
@@ -314,7 +334,7 @@ class Controller:
                         float(moving_result["palm"]) * width
                     )
 
-            if hands_on and scheme == "double":
+            if hands_on and scheme == "double" and self.governor.hands_allowed():
                 click_wrist = pose.wrist(click_hand)
                 if click_wrist is not None:
                     if self._frame_index % 2 == 0 or last_click_result is None:
@@ -403,6 +423,10 @@ class Controller:
             )
             active_calibration = calibration if calibrated else None
 
+            writing = bool(self.config.get("pointer.write_mode", True)) and (
+                gestures.state in ("Pending", "Dragging")
+            )
+
             if point is not None and inside and not calibrating:
                 if mode == "absolute":
                     target = absolute.update(
@@ -415,7 +439,12 @@ class Controller:
                         calibration=active_calibration,
                     )
                     if target is not None:
-                        inject.set_cursor(target[0], target[1])
+                        cx, cy = target
+                        if writing:
+                            cx, cy = self._stroke.update(cx, cy, True)
+                        else:
+                            self._stroke.reset()
+                        inject.set_cursor(cx, cy)
                 else:
                     if not self._inside:
                         pointer.reset()
@@ -428,13 +457,22 @@ class Controller:
                         target_y = y + dy + self._carry_y
                         next_x = int(round(target_x))
                         next_y = int(round(target_y))
-                        inject.set_cursor(next_x, next_y)
-                        self._carry_x = max(
-                            -1.0, min(1.0, target_x - next_x)
-                        )
-                        self._carry_y = max(
-                            -1.0, min(1.0, target_y - next_y)
-                        )
+                        if writing:
+                            next_x, next_y = self._stroke.update(
+                                next_x, next_y, True
+                            )
+                            inject.set_cursor(next_x, next_y)
+                            self._carry_x = 0.0
+                            self._carry_y = 0.0
+                        else:
+                            self._stroke.reset()
+                            inject.set_cursor(next_x, next_y)
+                            self._carry_x = max(
+                                -1.0, min(1.0, target_x - next_x)
+                            )
+                            self._carry_y = max(
+                                -1.0, min(1.0, target_y - next_y)
+                            )
 
                         edge = max(8, int(screen_h * 0.05))
                         if dy < 0 and next_y <= edge:
@@ -506,6 +544,17 @@ class Controller:
                 pose.draw(preview_frame)
                 hands.draw(preview_frame, moving_result)
                 hands.draw(preview_frame, click_result)
+                if bool(self.config.get("overlay.status_bar", True)):
+                    from .overlay import draw_status
+
+                    draw_status(preview_frame, {
+                        "active": self._active.is_set(),
+                        "recording": False,
+                        "mode": mode,
+                        "tier": tier_state.name,
+                        "fps": fps,
+                        "perf": self.governor.name,
+                    })
                 self.preview.publish(
                     preview_frame,
                     {
@@ -523,6 +572,10 @@ class Controller:
                         "tier_applied": tier_state.applied,
                         "hands_on": hands_on,
                         "palm_px": self._last_palm_px,
+                        "perf": self.governor.name,
+                        "cpu": self.governor.cpu,
+                        "rss": self.governor.rss_mb,
+                        "writing": writing,
                         "drop": drop,
                         "mode": mode,
                         "inside": inside,

@@ -110,6 +110,7 @@ SECTIONS = [
             ("performance.mode", "模式", "choice", ["auto", "high", "low"]),
             ("performance.cpu_limit_pct", "CPU 上限（%）", "int"),
             ("performance.rss_limit_mb", "内存上限（MB）", "int"),
+            ("performance.recover_seconds", "恢复等待（秒）", "int"),
         ],
     ),
     (
@@ -128,6 +129,8 @@ SECTIONS = [
             ("tier.mode", "模式", "choice", ["auto", "manual"]),
             ("tier.lock", "锁定档位", "choice", ["", "A", "B", "C", "D", "E"]),
             ("tier.apply", "自动应用档位设置", "bool"),
+            ("tier.apply_mode", "档位决定映射方式", "bool"),
+            ("tier.apply_gesture", "档位决定手势方案", "bool"),
         ],
     ),
     (
@@ -143,6 +146,9 @@ SECTIONS = [
             ("pointer.active_on_start", "启动即激活", "bool"),
             ("pointer.mouse_pause", "鼠标一动就暂停", "bool"),
             ("pointer.mouse_pause_sec", "暂停秒数", "int"),
+            ("pointer.write_mode", "书写平滑", "bool"),
+            ("pointer.write_smoothing", "书写平滑强度", "float"),
+            ("pointer.write_min_step_px", "书写最小步长（px）", "float"),
             ("pointer.gain_relative", "相对增益", "float"),
             ("pointer.deadzone_px", "死区（px）", "float"),
             ("pointer.prediction_ms", "预测（ms）", "int"),
@@ -196,6 +202,7 @@ SECTIONS = [
         [
             ("hotkey.toggle_active", "激活/暂停", "str"),
             ("hotkey.toggle_mode", "切换模式", "str"),
+            ("hotkey.control_bar", "显示控制条", "str"),
             ("hotkey.emergency_stop", "急停", "str"),
         ],
     ),

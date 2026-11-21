@@ -47,6 +47,8 @@ DEFAULTS = {
         "mode": "auto",
         "lock": "",
         "apply": True,
+        "apply_mode": True,
+        "apply_gesture": False,
         "shoulder_a": 0.085,
         "shoulder_b": 0.060,
         "shoulder_c": 0.045,
@@ -73,6 +75,9 @@ DEFAULTS = {
         "active_on_start": False,
         "mouse_pause": True,
         "mouse_pause_sec": 3,
+        "write_mode": True,
+        "write_smoothing": 0.35,
+        "write_min_step_px": 1.5,
         "box": [],
         "calibration": [],
         "calibration_size": [],
@@ -99,13 +104,14 @@ DEFAULTS = {
     },
     "overlay": {
         "status_bar": True,
-        "control_bar": True,
+        "control_bar": False,
         "large_cursor": False,
         "presentation_safe_zone": False,
     },
     "hotkey": {
         "toggle_active": "ctrl+alt+shift+f9",
         "toggle_mode": "ctrl+alt+shift+f10",
+        "control_bar": "ctrl+alt+shift+f8",
         "emergency_stop": "f12",
     },
     "recording": {
@@ -118,6 +124,7 @@ DEFAULTS = {
         "cpu_limit_pct": 20,
         "rss_limit_mb": 600,
         "low_power_fps": 15,
+        "recover_seconds": 20,
     },
     "logging": {
         "level": "info",

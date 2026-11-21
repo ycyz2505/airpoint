@@ -41,7 +41,8 @@ updates.
 - Camera capture at 1080p or 4K; automatic device and backend selection.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
-- Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `F12` emergency stop.
+- Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
+  `Ctrl+Alt+Shift+F8` control bar, `F12` emergency stop.
 - Preview/diagnostics window with the camera image, pose skeleton, wrist hit
   rate, and live gain/smoothing/prediction sliders.
 - Left click by pinch or fist; right click by holding 1 s; drag, double click,
@@ -65,6 +66,19 @@ updates.
 - Manual recording from the tray: the controller stops cursor work and writes
   the raw camera stream to `recordings/rec-*.avi` (MJPG) after checking free
   disk space.
+- Offline replay: `python -m airpoint.replay clip.avi --csv metrics.csv`
+  re-runs pose, hands, pointer, gestures, and tiering over a recording and
+  reports hit rate, palm size, cursor path, and tier time, so feel can be
+  tuned without the classroom. The packaged executable does the same with
+  `OpticalInputSvc.exe --replay clip.avi`.
+- Handwriting mode: while the button is held the cursor is filtered harder so
+  strokes drawn in the Seewo whiteboard come out as lines instead of jitter.
+- Control bar: a small always-on-top bar with activate, click, mode, preview,
+  and settings, reachable by the air cursor at six metres.
+- Performance governor: six levels from full quality down to pause, chosen
+  from the process CPU and working set, with a slow recovery back up.
+- Tiering now only changes the mapping mode by default; gesture scheme changes
+  are opt-in so the interaction does not flip underneath the user.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 

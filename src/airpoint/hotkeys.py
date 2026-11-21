@@ -68,11 +68,15 @@ def parse(spec: str) -> tuple[int, int | None]:
 
 
 class Hotkeys:
-    def __init__(self, config, log, on_toggle, on_emergency):
+    def __init__(
+        self, config, log, on_toggle, on_emergency, on_mode=None, on_bar=None
+    ):
         self.config = config
         self.log = log
         self.on_toggle = on_toggle
         self.on_emergency = on_emergency
+        self.on_mode = on_mode
+        self.on_bar = on_bar
         self._thread = threading.Thread(
             target=self._run, daemon=True, name="airpoint-hotkeys"
         )
@@ -82,10 +86,14 @@ class Hotkeys:
 
     def _run(self) -> None:
         bindings = []
-        entries = (
+        entries = [
             (1, "hotkey.toggle_active", self.on_toggle),
             (2, "hotkey.emergency_stop", self.on_emergency),
-        )
+        ]
+        if self.on_mode is not None:
+            entries.append((3, "hotkey.toggle_mode", self.on_mode))
+        if self.on_bar is not None:
+            entries.append((4, "hotkey.control_bar", self.on_bar))
         for ident, key, callback in entries:
             modifiers, vk = parse(str(self.config.get(key, "")))
             if vk is None:

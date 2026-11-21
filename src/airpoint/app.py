@@ -11,6 +11,7 @@ from .controller import Controller
 from .hotkeys import Hotkeys
 from .logging_util import make_logger
 from .mousehook import MouseHook, MousePause
+from .overlay import ControlBar
 from .paths import data_dir, log_dir, updates_dir
 from .preview import PreviewBus, open_preview
 from .profiles import ProfileStore
@@ -45,9 +46,59 @@ def _dpi() -> None:
         pass
 
 
+def _replay_cli() -> None:
+    """Analyze a recording without starting the service."""
+    index = sys.argv.index("--replay")
+    rest = [item for item in sys.argv[index + 1:] if not item.startswith("-")]
+    if not rest:
+        _message("用法：OpticalInputSvc.exe --replay <录像.avi>")
+        return
+
+    from .replay import analyze
+
+    video = rest[0]
+    csv_path = rest[1] if len(rest) > 1 else None
+    try:
+        summary = analyze(video, csv_path=csv_path)
+    except Exception as exc:
+        _message(f"回放失败：{exc}")
+        return
+
+    text = (
+        f"帧数：{summary['frames']}（{summary['duration_s']} 秒）\n"
+        f"姿态命中：{summary['pose_hit_pct']}%\n"
+        f"手部命中：{summary['hand_hit_pct']}%\n"
+        f"手掌中位：{summary['palm_px']['median']}px\n"
+        f"档位分布：{summary['tier']}\n"
+        f"光标路径：{summary['cursor']['path_px']}px\n"
+        f"抖动：dx {summary['cursor']['dx_std']} / "
+        f"dy {summary['cursor']['dy_std']}\n"
+        f"点击：{summary['gestures']['clicks']}，"
+        f"右键：{summary['gestures']['right_clicks']}，"
+        f"拖拽：{summary['gestures']['drags']}"
+    )
+    _message(text)
+
+
+def _message(text: str) -> None:
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("OpticalInputSvc", text)
+        root.destroy()
+    except Exception:
+        pass
+
+
 def main() -> None:
     if "--version" in sys.argv:
         print(__version__)
+        return
+    if "--replay" in sys.argv:
+        _replay_cli()
         return
     _dpi()
     if not _single_instance():
@@ -106,6 +157,39 @@ def main() -> None:
         mouse_pause.cancel()
         controller.set_active(not controller.active)
 
+    def on_mode() -> None:
+        current = str(config.get("pointer.mode", "auto"))
+        order = ["auto", "absolute", "relative"]
+        try:
+            index = order.index(current)
+        except ValueError:
+            index = 0
+        config.set("pointer.mode", order[(index + 1) % len(order)])
+        config.save()
+        controller.reload()
+        log(f"pointer mode {config.get('pointer.mode')}")
+
+    bar = None
+
+    def on_bar() -> None:
+        ui.post(lambda root: show_bar(root))
+
+    def show_bar(root) -> None:
+        nonlocal bar
+        if bar is None:
+            bar = ControlBar(
+                root,
+                controller,
+                config,
+                on_settings=lambda: on_settings(),
+                on_exit=lambda: on_exit(),
+            )
+        bar.show()
+
+    def on_hotkey_mode() -> None:
+        mouse_pause.cancel()
+        on_mode()
+
     def on_settings() -> None:
         ui.post(
             lambda root: locked(
@@ -163,7 +247,6 @@ def main() -> None:
         lambda: controller.active,
         lambda: controller.recording,
     )
-
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
         marker.write_text(str(time.time()), encoding="utf-8")
@@ -178,8 +261,13 @@ def main() -> None:
         log,
         on_toggle,
         lambda: controller.set_active(False),
+        on_mode=on_hotkey_mode,
+        on_bar=on_bar,
     )
     hotkeys.start()
+
+    if bool(config.get("overlay.control_bar", False)):
+        ui.post(lambda root: show_bar(root))
 
     if bool(config.get("pointer.mouse_pause", True)):
         MouseHook(log, mouse_pause.trigger).start()

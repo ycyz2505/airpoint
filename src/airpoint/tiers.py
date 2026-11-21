@@ -35,6 +35,7 @@ class TierEngine:
         self.shoulder = 0.0
         self.palm_px = 0.0
         self.drop = 0.0
+        self._adopted = False
 
     def _band(self) -> str:
         shoulder = self.shoulder
@@ -110,7 +111,12 @@ class TierEngine:
             if target != self.target:
                 self.target = target
                 self.target_since = now
-            if self.target != self.current and not busy:
+            if not self._adopted and self.shoulder > 0:
+                self._adopted = True
+                self.current = self.target
+                self.target_since = now
+                self.log(f"tier {self.current}")
+            elif self.target != self.current and not busy:
                 worse = ORDER.index(self.target) > ORDER.index(self.current)
                 delay = float(
                     self.config.get(
@@ -125,12 +131,29 @@ class TierEngine:
                     self.log(f"tier {self.current}")
 
         spec = SPECS[self.current]
+        mode = spec[0]
+        scheme = spec[1]
+        click = spec[2]
+        hands = spec[3]
+        if apply:
+            if not bool(self.config.get("tier.apply_mode", True)):
+                mode = str(self.config.get("pointer.mode", mode))
+                if mode == "auto":
+                    mode = "absolute" if self.config.get("pointer.box") else "relative"
+            if not bool(self.config.get("tier.apply_gesture", False)):
+                scheme = str(self.config.get("gesture.scheme", scheme))
+                click = str(self.config.get("gesture.click", click))
+                if scheme == "auto":
+                    scheme = "single"
+                if click == "auto":
+                    click = "pinch" if scheme == "single" else "fist"
+                hands = True
         return TierState(
             name=self.current,
-            mode=spec[0],
-            scheme=spec[1],
-            click=spec[2],
-            hands=spec[3],
+            mode=mode,
+            scheme=scheme,
+            click=click,
+            hands=hands,
             band=self.band,
             applied=apply,
         )

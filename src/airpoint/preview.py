@@ -316,7 +316,11 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             f"增益：{stats.get('gain', 0.0):.2f}    "
             f"手腕置信：{stats.get('wrist_conf', 0.0):.2f}    "
             f"捏合比：{stats.get('pinch_ratio', 0.0):.2f}    "
-            f"握拳比：{stats.get('fist_ratio', 0.0):.2f}"
+            f"握拳比：{stats.get('fist_ratio', 0.0):.2f}\n"
+            f"性能：{stats.get('perf', 'L0 全质量')}    "
+            f"CPU：{stats.get('cpu', 0.0):.1f}%    "
+            f"内存：{stats.get('rss', 0.0):.0f} MB    "
+            f"书写：{'是' if stats.get('writing') else '否'}"
         )
 
     def poll() -> None:
