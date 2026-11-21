@@ -58,6 +58,7 @@ class RelativePointer:
         self._fy = OneEuro(mincutoff=mincutoff, beta=beta)
         self._last = None
         self._last_t = None
+        self._last_raw = None
 
     def update(
         self,
@@ -70,26 +71,44 @@ class RelativePointer:
         fx = self._fx(x, t)
         fy = self._fy(y, t)
 
-        if self._last is None or self._last_t is None:
+        if (
+            self._last is None
+            or self._last_t is None
+            or self._last_raw is None
+        ):
             self._last = (fx, fy)
             self._last_t = t
+            self._last_raw = (x, y)
             return 0.0, 0.0
 
         dt = max(1e-6, t - self._last_t)
         if dt > 0.5:
             self._last = (fx, fy)
             self._last_t = t
+            self._last_raw = (x, y)
+            return 0.0, 0.0
+
+        raw_vx = (x - self._last_raw[0]) / dt
+        raw_vy = (y - self._last_raw[1]) / dt
+        raw_speed = math.hypot(raw_vx, raw_vy)
+
+        if raw_speed < float(self.config.get("pointer.rest_speed", 0.05)):
+            self._last = (fx, fy)
+            self._last_t = t
+            self._last_raw = (x, y)
             return 0.0, 0.0
 
         gain = float(self.config.get("pointer.gain_relative", 1.8))
         prediction = float(self.config.get("pointer.prediction_ms", 40)) / 1000.0
         max_step = float(self.config.get("pointer.max_step_px", 250.0))
 
-        vx = (fx - self._last[0]) / dt
-        vy = (fy - self._last[1]) / dt
+        if bool(self.config.get("pointer.accel_enabled", True)):
+            v0 = max(1e-6, float(self.config.get("pointer.accel_v0", 0.8)))
+            cap = max(1.0, float(self.config.get("pointer.accel_max", 2.0)))
+            gain *= min(cap, 1.0 + (raw_speed / v0) ** 2)
 
-        dx = (fx - self._last[0] + vx * prediction) * gain * screen_w
-        dy = (fy - self._last[1] + vy * prediction) * gain * screen_h
+        dx = (fx - self._last[0] + raw_vx * prediction) * gain * screen_w
+        dy = (fy - self._last[1] + raw_vy * prediction) * gain * screen_h
 
         dx = max(-max_step, min(max_step, dx))
         dy = max(-max_step, min(max_step, dy))
@@ -102,4 +121,5 @@ class RelativePointer:
 
         self._last = (fx, fy)
         self._last_t = t
+        self._last_raw = (x, y)
         return dx, dy

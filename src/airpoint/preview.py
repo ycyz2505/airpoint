@@ -5,7 +5,9 @@ import threading
 import cv2
 import tkinter as tk
 from PIL import Image, ImageTk
-from tkinter import ttk
+from tkinter import messagebox, ttk
+
+from .config import DEFAULTS
 
 
 class PreviewBus:
@@ -38,7 +40,7 @@ class PreviewBus:
             return self._frame, dict(self._stats)
 
 
-def open_preview(root, bus: PreviewBus, controller) -> None:
+def open_preview(root, bus: PreviewBus, controller, config) -> None:
     existing = getattr(root, "_preview_window", None)
     if existing is not None:
         try:
@@ -51,8 +53,8 @@ def open_preview(root, bus: PreviewBus, controller) -> None:
     win = tk.Toplevel(root)
     root._preview_window = win
     win.title("OpticalInputSvc 预览诊断")
-    win.geometry("720x600")
-    win.minsize(640, 520)
+    win.geometry("780x860")
+    win.minsize(700, 720)
 
     image_label = ttk.Label(win, anchor="center")
     image_label.pack(fill="both", expand=True, padx=8, pady=(8, 0))
@@ -62,10 +64,61 @@ def open_preview(root, bus: PreviewBus, controller) -> None:
         fill="x", padx=10, pady=6
     )
 
+    tune = ttk.LabelFrame(win, text="手感", padding=8)
+    tune.pack(fill="x", padx=10, pady=(0, 6))
+
+    sliders = {}
+
+    def add_slider(row, label, key, low, high, step):
+        ttk.Label(tune, text=label).grid(
+            row=row, column=0, sticky="w", padx=(0, 8), pady=1
+        )
+        var = tk.DoubleVar(value=float(config.get(key, low)))
+        scale = tk.Scale(
+            tune,
+            from_=low,
+            to=high,
+            resolution=step,
+            orient="horizontal",
+            variable=var,
+            showvalue=True,
+            length=340,
+            command=lambda value, k=key: config.set(k, float(value)),
+        )
+        scale.grid(row=row, column=1, sticky="ew", padx=(0, 8), pady=1)
+        tune.columnconfigure(1, weight=1)
+        sliders[key] = (var, scale)
+
+    add_slider(0, "增益", "pointer.gain_relative", 0.4, 4.0, 0.1)
+    add_slider(1, "平滑（越小越稳）", "pointer.mincutoff", 0.2, 3.0, 0.1)
+    add_slider(2, "跟随（越大越快）", "pointer.beta", 0.0, 1.5, 0.05)
+    add_slider(3, "预测（ms）", "pointer.prediction_ms", 0, 100, 5)
+    add_slider(4, "死区（px）", "pointer.deadzone_px", 0.0, 5.0, 0.1)
+    add_slider(5, "单帧最大位移（px）", "pointer.max_step_px", 50, 600, 10)
+    add_slider(6, "加速起点", "pointer.accel_v0", 0.2, 2.0, 0.1)
+    add_slider(7, "加速上限", "pointer.accel_max", 1.0, 3.0, 0.1)
+
+    accel_var = tk.BooleanVar(
+        value=bool(config.get("pointer.accel_enabled", True))
+    )
+
+    def toggle_accel() -> None:
+        config.set("pointer.accel_enabled", bool(accel_var.get()))
+
+    ttk.Checkbutton(
+        tune, text="速度加速", variable=accel_var, command=toggle_accel
+    ).grid(row=8, column=0, columnspan=2, sticky="w", pady=(4, 0))
+
     bar = ttk.Frame(win)
     bar.pack(fill="x", padx=10, pady=(0, 10))
     toggle_button = ttk.Button(bar, text="激活")
     toggle_button.pack(side="left")
+    ttk.Button(bar, text="保存参数", command=lambda: save()).pack(
+        side="left", padx=6
+    )
+    ttk.Button(bar, text="重置手感", command=lambda: reset()).pack(
+        side="left", padx=(0, 6)
+    )
     ttk.Button(bar, text="关闭", command=lambda: close()).pack(side="right")
 
     photo = None
@@ -78,6 +131,23 @@ def open_preview(root, bus: PreviewBus, controller) -> None:
         )
 
     toggle_button.configure(command=toggle)
+
+    def save() -> None:
+        config.save()
+        messagebox.showinfo("OpticalInputSvc", "参数已保存。", parent=win)
+
+    def reset() -> None:
+        defaults = DEFAULTS.get("pointer", {})
+        for key, (var, _scale) in sliders.items():
+            short = key.split(".", 1)[1]
+            value = float(defaults.get(short, var.get()))
+            var.set(value)
+            config.set(key, value)
+        accel_var.set(bool(defaults.get("accel_enabled", True)))
+        config.set("pointer.accel_enabled", bool(accel_var.get()))
+        messagebox.showinfo(
+            "OpticalInputSvc", "已恢复手感默认值，点保存写入。", parent=win
+        )
 
     def close() -> None:
         bus.set_enabled(False)

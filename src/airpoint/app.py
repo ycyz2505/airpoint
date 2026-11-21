@@ -115,7 +115,9 @@ def main() -> None:
         ui.post(
             lambda root: locked(
                 root,
-                lambda: open_preview(root, controller.preview, controller),
+                lambda: open_preview(
+                    root, controller.preview, controller, config
+                ),
             )
         )
 

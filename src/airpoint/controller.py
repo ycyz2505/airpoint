@@ -26,6 +26,8 @@ class Controller:
         self._window_start = 0.0
         self._frames = 0
         self._hits = 0
+        self._carry_x = 0.0
+        self._carry_y = 0.0
 
     def start(self) -> None:
         with self._lock:
@@ -89,6 +91,8 @@ class Controller:
                 pointer.reset()
                 self._frames = 0
                 self._hits = 0
+                self._carry_x = 0.0
+                self._carry_y = 0.0
                 last_hit = 0.0
                 self._window_start = time.time()
 
@@ -127,7 +131,17 @@ class Controller:
                 )
                 if dx or dy:
                     x, y = inject.get_cursor()
-                    inject.set_cursor(x + dx, y + dy)
+                    target_x = x + dx + self._carry_x
+                    target_y = y + dy + self._carry_y
+                    next_x = int(round(target_x))
+                    next_y = int(round(target_y))
+                    inject.set_cursor(next_x, next_y)
+                    self._carry_x = max(
+                        -1.0, min(1.0, target_x - next_x)
+                    )
+                    self._carry_y = max(
+                        -1.0, min(1.0, target_y - next_y)
+                    )
 
             elapsed = max(0.5, now - self._window_start)
             fps = self._frames / elapsed
@@ -142,6 +156,11 @@ class Controller:
                 height0, width0 = frame.shape[:2]
                 preview_w = 640
                 preview_h = max(1, int(height0 * preview_w / max(1, width0)))
+                if preview_h > 360:
+                    preview_h = 360
+                    preview_w = max(
+                        1, int(width0 * preview_h / max(1, height0))
+                    )
                 preview_frame = cv2.resize(
                     frame,
                     (preview_w, preview_h),

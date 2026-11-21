@@ -55,6 +55,10 @@ DEFAULTS = {
         "max_step_px": 250,
         "mincutoff": 0.8,
         "beta": 0.3,
+        "accel_enabled": True,
+        "accel_v0": 0.8,
+        "accel_max": 2.0,
+        "rest_speed": 0.05,
         "active_on_start": False,
     },
     "pose": {
