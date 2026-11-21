@@ -102,6 +102,8 @@ SECTIONS = [
                 "choice",
                 ["startup", "next_start", "manual"],
             ),
+            ("update.require_signature", "要求签名", "bool"),
+            ("update.allow_downgrade", "允许降级", "bool"),
         ],
     ),
     (
@@ -118,12 +120,19 @@ SECTIONS = [
             ("performance.cpu_limit_pct", "CPU 上限（%）", "int"),
             ("performance.rss_limit_mb", "内存上限（MB）", "int"),
             ("performance.recover_seconds", "恢复等待（秒）", "int"),
+            ("logging.max_mb", "日志上限（MB）", "float"),
         ],
     ),
     (
         "摄像头",
         [
             ("camera.device", "设备", "str"),
+            (
+                "camera.backend",
+                "后端",
+                "choice",
+                ["dshow", "msmf", "any"],
+            ),
             ("camera.width", "宽度", "int"),
             ("camera.height", "高度", "int"),
             ("camera.fps", "帧率", "int"),
@@ -200,8 +209,6 @@ SECTIONS = [
         [
             ("overlay.status_bar", "状态条", "bool"),
             ("overlay.control_bar", "控制条", "bool"),
-            ("overlay.large_cursor", "大光标", "bool"),
-            ("overlay.presentation_safe_zone", "演示安全区", "bool"),
         ],
     ),
     (
@@ -216,8 +223,6 @@ SECTIONS = [
     (
         "录制",
         [
-            ("recording.manual", "手动开始", "bool"),
-            ("recording.prefer_4k", "优先 4K", "bool"),
             ("recording.min_free_gb", "最低剩余空间（GB）", "int"),
         ],
     ),

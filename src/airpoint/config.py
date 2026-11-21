@@ -14,7 +14,6 @@ DEFAULTS = {
     "startup": {
         "silent": True,
         "auto_run": False,
-        "first_run_wizard": True,
     },
     "security": {
         "password_hash": "",
@@ -93,7 +92,6 @@ DEFAULTS = {
         "right_click_ms": 1000,
         "drag_threshold_px": 6,
         "double_click_ms": 350,
-        "personalized": False,
         "pinch_enter": 0.45,
         "pinch_exit": 0.65,
         "fist_enter": 1.30,
@@ -106,8 +104,6 @@ DEFAULTS = {
     "overlay": {
         "status_bar": True,
         "control_bar": False,
-        "large_cursor": False,
-        "presentation_safe_zone": False,
     },
     "hotkey": {
         "toggle_active": "ctrl+alt+shift+f9",
@@ -116,20 +112,16 @@ DEFAULTS = {
         "emergency_stop": "f12",
     },
     "recording": {
-        "manual": True,
-        "prefer_4k": True,
         "min_free_gb": 20,
     },
     "performance": {
         "mode": "auto",
         "cpu_limit_pct": 20,
         "rss_limit_mb": 600,
-        "low_power_fps": 15,
         "recover_seconds": 20,
     },
     "logging": {
-        "level": "info",
-        "max_mb": 20,
+        "max_mb": 0.5,
     },
 }
 

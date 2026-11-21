@@ -36,8 +36,17 @@ class Camera:
         targets = [(3840, 2160), (1920, 1080)] if prefer_4k else [(1920, 1080)]
         fps = int(self.config.get("camera.fps", 30))
 
+        order = {
+            "dshow": (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
+            "msmf": (cv2.CAP_MSMF, cv2.CAP_DSHOW, cv2.CAP_ANY),
+            "any": (cv2.CAP_ANY, cv2.CAP_DSHOW, cv2.CAP_MSMF),
+        }.get(
+            str(self.config.get("camera.backend", "dshow")).lower(),
+            (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
+        )
+
         for index in indices:
-            for backend in (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY):
+            for backend in order:
                 cap = cv2.VideoCapture(index, backend)
                 if not cap.isOpened():
                     cap.release()

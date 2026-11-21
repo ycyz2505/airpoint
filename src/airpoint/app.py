@@ -111,7 +111,7 @@ def main() -> None:
     config = Config()
     ProfileStore(config).load_last()
     security = Security(config)
-    log = make_logger("app")
+    log = make_logger("app", config)
     log(f"start {__version__}")
 
     if str(config.get("update.apply_when", "startup")) != "manual":
@@ -237,7 +237,7 @@ def main() -> None:
         threading.Thread(
             target=updater.check_and_update,
             args=(log,),
-            kwargs={"on_ready": icon.stop, "delay": 0.0},
+            kwargs={"on_ready": icon.stop, "delay": 0.0, "config": config},
             daemon=True,
         ).start()
 
@@ -296,7 +296,9 @@ def main() -> None:
                 continue
             if controller.recording:
                 continue
-            updater.check_and_update(log, on_ready=icon.stop, delay=0.0)
+            updater.check_and_update(
+                log, on_ready=icon.stop, delay=0.0, config=config
+            )
 
     if "--no-update" not in sys.argv and bool(
         config.get("update.enabled", True)
@@ -306,7 +308,11 @@ def main() -> None:
             threading.Thread(
                 target=updater.check_and_update,
                 args=(log,),
-                kwargs={"on_ready": icon.stop, "apply_now": apply_now},
+                kwargs={
+                    "on_ready": icon.stop,
+                    "apply_now": apply_now,
+                    "config": config,
+                },
                 daemon=True,
             ).start()
         threading.Thread(target=update_loop, daemon=True).start()

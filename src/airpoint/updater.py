@@ -98,14 +98,14 @@ def _fetch(url: str, timeout: int, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
-def _sources(url: str):
-    for prefix in ACCELERATORS:
+def _sources(url: str, accelerators=None):
+    for prefix in accelerators or ACCELERATORS:
         yield prefix + url
 
 
-def _fetch_manifest(log):
+def _fetch_manifest(log, accelerators=None):
     errors = []
-    for candidate in _sources(MANIFEST_URL):
+    for candidate in _sources(MANIFEST_URL, accelerators):
         try:
             raw = _fetch(candidate, MANIFEST_TIMEOUT, MANIFEST_MAX)
             data = json.loads(raw.decode("utf-8"))
@@ -136,9 +136,9 @@ def _canonical(entry: dict) -> bytes:
     ).encode("utf-8")
 
 
-def _verify_signature(entry: dict, signature: str) -> bool:
+def _verify_signature(entry: dict, signature: str, required: bool = True) -> bool:
     if not PUBLIC_KEY_B64:
-        return True
+        return not required or bool(signature)
     if not signature:
         return False
     try:
@@ -183,7 +183,7 @@ def _fetch_to_file(
     return digest.hexdigest(), total
 
 
-def _download(entry: dict, log, target: Path) -> Path:
+def _download(entry: dict, log, target: Path, accelerators=None) -> Path:
     url = str(entry.get("url") or "")
     if not url:
         raise ValueError("manifest missing url")
@@ -191,7 +191,7 @@ def _download(entry: dict, log, target: Path) -> Path:
     expected_size = entry.get("size")
     errors = []
     part = target.with_name(target.stem + ".part")
-    for candidate in _sources(url):
+    for candidate in _sources(url, accelerators):
         try:
             actual, size = _fetch_to_file(
                 candidate, ASSET_TIMEOUT, ASSET_MAX, part
@@ -293,7 +293,7 @@ def apply_staged(log) -> bool:
 
 
 def check_and_update(
-    log, on_ready=None, delay: float = 3.0, apply_now: bool = True
+    log, on_ready=None, delay: float = 3.0, apply_now: bool = True, config=None
 ) -> None:
     if not getattr(sys, "frozen", False):
         log("not frozen; update disabled")
@@ -301,21 +301,36 @@ def check_and_update(
     if os.environ.get("OPTICALINPUT_NO_UPDATE"):
         log("update disabled by OPTICALINPUT_NO_UPDATE")
         return
+    accelerators = None
+    required = True
+    allow_downgrade = False
+    if config is not None:
+        raw = config.get("update.accelerators", None)
+        if isinstance(raw, list) and raw:
+            accelerators = [str(item) for item in raw]
+        required = bool(config.get("update.require_signature", True))
+        allow_downgrade = bool(config.get("update.allow_downgrade", False))
     if delay:
         time.sleep(delay)
     log(f"checking; current {__version__}")
     try:
-        manifest = _fetch_manifest(log)
+        manifest = _fetch_manifest(log, accelerators)
         entry = manifest["airpoint"]
         remote = str(entry.get("version") or "")
-        if not remote or not _is_newer(remote, __version__):
-            log(f"up to date ({remote or __version__})")
+        if not remote:
+            log("manifest has no version")
             return
-        if not _verify_signature(entry, str(manifest.get("signature") or "")):
+        newer = _is_newer(remote, __version__)
+        if not newer and (remote == __version__ or not allow_downgrade):
+            log(f"up to date ({remote})")
+            return
+        if not _verify_signature(
+            entry, str(manifest.get("signature") or ""), required
+        ):
             log("signature invalid; refusing update")
             return
         target = exe_path()
-        part = _download(entry, log, target)
+        part = _download(entry, log, target, accelerators)
         new = staged_path()
         part.replace(new)
         if not apply_now:
