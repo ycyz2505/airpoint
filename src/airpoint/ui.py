@@ -125,6 +125,7 @@ SECTIONS = [
         [
             ("tier.mode", "模式", "choice", ["auto", "manual"]),
             ("tier.lock", "锁定档位", "choice", ["", "A", "B", "C", "D", "E"]),
+            ("tier.apply", "自动应用档位设置", "bool"),
         ],
     ),
     (

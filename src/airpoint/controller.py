@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 
 import cv2
 
@@ -11,6 +12,7 @@ from .gestures import GestureEngine
 from .hands import HandTracker
 from .pointer import AbsolutePointer, RelativePointer
 from .pose import PoseTracker
+from .tiers import TierEngine
 
 
 class Controller:
@@ -36,6 +38,9 @@ class Controller:
         self._last_mode = ""
         self._inside = False
         self._calibrating = threading.Event()
+        self._tier = TierEngine(config, log)
+        self._seen = deque(maxlen=60)
+        self._last_palm_px = 0.0
 
     def start(self) -> None:
         with self._lock:
@@ -123,6 +128,8 @@ class Controller:
                 self._scroll_acc = 0.0
                 self._inside = False
                 self._last_mode = ""
+                self._seen.clear()
+                self._last_palm_px = 0.0
                 last_hit = 0.0
                 last_gesture_seen = 0.0
                 last_click_result = None
@@ -155,19 +162,38 @@ class Controller:
             now = time.time()
             calibrating = self._calibrating.is_set()
 
+            self._seen.append(1 if wrist is not None else 0)
+            drop = 1.0 - (sum(self._seen) / len(self._seen))
+            shoulder = pose.shoulder_width()
+            pose_conf = wrist[2] if wrist else 0.0
+            busy = gestures.state != "Idle"
+            tier_state = self._tier.update(
+                shoulder, self._last_palm_px, drop, pose_conf, busy, now
+            )
+
             moving_hand = str(self.config.get("pointer.hand", "right"))
-            scheme = str(self.config.get("gesture.scheme", "auto"))
-            if scheme == "auto":
-                scheme = "single"
+            if tier_state.applied:
+                mode = tier_state.mode
+                scheme = tier_state.scheme
+                click_name = tier_state.click
+                hands_on = tier_state.hands
+            else:
+                mode = str(self.config.get("pointer.mode", "relative"))
+                scheme = str(self.config.get("gesture.scheme", "auto"))
+                if scheme == "auto":
+                    scheme = "single"
+                click_name = str(self.config.get("gesture.click", "auto"))
+                if click_name == "auto":
+                    click_name = (
+                        "pinch" if scheme == "single" else "fist"
+                    )
+                hands_on = True
             click_hand = "left" if moving_hand == "right" else "right"
-            click_name = str(self.config.get("gesture.click", "auto"))
-            if click_name == "auto":
-                click_name = "pinch" if scheme == "single" else "fist"
 
             moving_result = None
             click_result = None
 
-            if wrist is not None:
+            if hands_on and wrist is not None:
                 moving_result = hands.process(
                     frame, wrist, pose.elbow(moving_hand), moving_hand
                 )
@@ -175,8 +201,12 @@ class Controller:
                     pointer.reset()
                 last_hit = now
                 self._hits += 1
+                if moving_result and moving_result.get("palm"):
+                    self._last_palm_px = (
+                        float(moving_result["palm"]) * width
+                    )
 
-            if scheme == "double":
+            if hands_on and scheme == "double":
                 click_wrist = pose.wrist(click_hand)
                 if click_wrist is not None:
                     if self._frame_index % 2 == 0 or last_click_result is None:
@@ -206,7 +236,6 @@ class Controller:
             box = self.config.get("pointer.box", [])
             if not isinstance(box, list) or len(box) != 4:
                 box = []
-            mode = str(self.config.get("pointer.mode", "relative"))
             if mode == "auto":
                 mode = "absolute" if box else "relative"
             if mode == "absolute" and not box:
@@ -381,6 +410,12 @@ class Controller:
                         "hands": hands.ready,
                         "hand": moving_hand,
                         "scheme": scheme,
+                        "tier": tier_state.name,
+                        "tier_band": tier_state.band,
+                        "tier_applied": tier_state.applied,
+                        "hands_on": hands_on,
+                        "palm_px": self._last_palm_px,
+                        "drop": drop,
                         "mode": mode,
                         "inside": inside,
                         "calibrating": calibrating,

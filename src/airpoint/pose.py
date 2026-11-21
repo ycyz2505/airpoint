@@ -88,6 +88,15 @@ class PoseTracker:
     def elbow(self, hand: str = "right"):
         return self.landmark(13 if hand == "left" else 14)
 
+    def shoulder_width(self) -> float:
+        if not self.last_landmarks:
+            return 0.0
+        left = self.last_landmarks[11]
+        right = self.last_landmarks[12]
+        if left.visibility < 0.3 or right.visibility < 0.3:
+            return 0.0
+        return abs(float(left.x) - float(right.x))
+
     def draw(self, frame) -> None:
         landmarks = self.last_landmarks
         if not landmarks:

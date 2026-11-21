@@ -53,6 +53,10 @@ updates.
   mode; outside it, the cursor freezes.
 - Five-point calibration for absolute mode: full-screen targets, hold still at
   each one, and a homography replaces the box affine mapping.
+- Automatic A–E tiering from shoulder width plus palm size and hand drop rate,
+  with downgrade/upgrade hysteresis. Near picks absolute + single hand; far
+  picks relative + two hands and drops hand gestures when the hand is too
+  small. Manual lock and advisory-only mode are available.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
 
