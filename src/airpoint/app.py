@@ -7,6 +7,9 @@ import time
 
 from . import updater
 from .config import Config
+from .controller import Controller
+from .hotkeys import Hotkeys
+from .logging_util import make_logger
 from .paths import data_dir, log_dir, updates_dir
 from .security import Security
 from .tray import create_icon
@@ -52,8 +55,11 @@ def main() -> None:
     updates_dir()
     config = Config()
     security = Security(config)
-    log = updater.make_logger()
+    log = make_logger("app")
     log(f"start {__version__}")
+
+    controller = Controller(config, log)
+    controller.start()
 
     ui = UiThread()
     ui.start()
@@ -87,16 +93,30 @@ def main() -> None:
             return
         action()
 
+    def on_toggle() -> None:
+        controller.set_active(not controller.active)
+
     def on_settings() -> None:
         ui.post(
             lambda root: locked(
                 root,
-                lambda: open_settings(root, config, security, __version__),
+                lambda: open_settings(
+                    root,
+                    config,
+                    security,
+                    __version__,
+                    on_saved=controller.reload,
+                ),
             )
         )
 
+    def do_exit() -> None:
+        controller.stop()
+        if icon is not None:
+            icon.stop()
+
     def on_exit() -> None:
-        ui.post(lambda root: locked(root, lambda: icon.stop()))
+        ui.post(lambda root: locked(root, do_exit))
 
     def on_check() -> None:
         threading.Thread(
@@ -106,7 +126,13 @@ def main() -> None:
             daemon=True,
         ).start()
 
-    icon = create_icon(on_settings, on_check, on_exit)
+    icon = create_icon(
+        on_toggle,
+        on_settings,
+        on_check,
+        on_exit,
+        lambda: controller.active,
+    )
 
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
@@ -116,6 +142,17 @@ def main() -> None:
 
     if not security.has_password:
         ui.post(first_run)
+
+    hotkeys = Hotkeys(
+        config,
+        log,
+        on_toggle,
+        lambda: controller.set_active(False),
+    )
+    hotkeys.start()
+
+    if bool(config.get("pointer.active_on_start", False)):
+        controller.set_active(True)
 
     if "--no-update" not in sys.argv and bool(
         config.get("update.enabled", True)

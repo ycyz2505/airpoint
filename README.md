@@ -9,8 +9,8 @@ meters away.
 
 ## Status
 
-Early prototype: silent tray and self-update are implemented; the air-mouse
-pipeline is in progress.
+Early prototype: silent tray, password-protected settings, self-update, and a
+pose-based relative cursor (right or left wrist).
 
 ## Planned capabilities
 
@@ -35,6 +35,14 @@ The download is checked against the SHA-256 in the manifest and an Ed25519
 signature, then the app restarts itself to apply it. A failed start rolls back
 to the previous build. Set `OPTICALINPUT_NO_UPDATE=1` to disable automatic
 updates.
+
+## Current build
+
+- Camera capture at 1080p or 4K; automatic device and backend selection.
+- MediaPipe Pose wrist tracking; right or left hand.
+- Relative cursor with One Euro smoothing and short prediction.
+- Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `F12` emergency stop.
+- All mouse buttons are released on pause, exit, or error.
 
 ## Settings
 

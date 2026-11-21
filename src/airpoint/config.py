@@ -48,9 +48,18 @@ DEFAULTS = {
     },
     "pointer": {
         "mode": "auto",
+        "hand": "right",
         "gain_relative": 1.8,
         "deadzone_px": 0.5,
         "prediction_ms": 40,
+        "max_step_px": 250,
+        "mincutoff": 0.8,
+        "beta": 0.3,
+        "active_on_start": False,
+    },
+    "pose": {
+        "model_complexity": 1,
+        "min_confidence": 0.5,
     },
     "gesture": {
         "click": "auto",

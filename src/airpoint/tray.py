@@ -15,12 +15,16 @@ def _image() -> Image.Image:
     return image
 
 
-def create_icon(on_settings, on_check, on_exit) -> pystray.Icon:
+def create_icon(on_toggle, on_settings, on_check, on_exit, is_active) -> pystray.Icon:
     return pystray.Icon(
         "OpticalInputSvc",
         _image(),
         "OpticalInputSvc · 运行中",
         menu=pystray.Menu(
+            pystray.MenuItem(
+                lambda item: "暂停鼠标" if is_active() else "激活鼠标",
+                lambda: on_toggle(),
+            ),
             pystray.MenuItem("设置…", lambda: on_settings()),
             pystray.MenuItem("检查更新", lambda: on_check()),
             pystray.MenuItem("退出", lambda: on_exit()),
