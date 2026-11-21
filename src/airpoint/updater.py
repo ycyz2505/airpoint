@@ -27,9 +27,9 @@ ACCELERATORS = (
 )
 USER_AGENT = "OpticalInputSvc-updater/1.0"
 MANIFEST_TIMEOUT = 8
-ASSET_TIMEOUT = 120
+ASSET_TIMEOUT = 600
 MANIFEST_MAX = 1024 * 1024
-ASSET_MAX = 64 * 1024 * 1024
+ASSET_MAX = 256 * 1024 * 1024
 
 
 def make_logger():
@@ -155,27 +155,61 @@ def _verify_signature(entry: dict, signature: str) -> bool:
         return False
 
 
-def _download(entry: dict, log) -> bytes:
+def _fetch_to_file(
+    url: str, timeout: int, max_bytes: int, path: Path
+) -> tuple[str, int]:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": USER_AGENT, "Cache-Control": "no-cache"},
+    )
+    opener = urllib.request.build_opener(_proxy_handler())
+    digest = hashlib.sha256()
+    total = 0
+    with opener.open(request, timeout=timeout) as response, path.open(
+        "wb"
+    ) as handle:
+        status = getattr(response, "status", 200)
+        if status < 200 or status >= 300:
+            raise OSError(f"HTTP {status}")
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise OSError("response too large")
+            digest.update(chunk)
+            handle.write(chunk)
+    return digest.hexdigest(), total
+
+
+def _download(entry: dict, log, target: Path) -> Path:
     url = str(entry.get("url") or "")
     if not url:
         raise ValueError("manifest missing url")
     expected = str(entry.get("sha256") or "").lower()
     expected_size = entry.get("size")
     errors = []
+    part = target.with_name(target.stem + ".part")
     for candidate in _sources(url):
         try:
-            data = _fetch(candidate, ASSET_TIMEOUT, ASSET_MAX)
-            actual = hashlib.sha256(data).hexdigest()
+            actual, size = _fetch_to_file(
+                candidate, ASSET_TIMEOUT, ASSET_MAX, part
+            )
             if expected and actual != expected:
                 raise ValueError(f"sha256 mismatch ({actual})")
             if isinstance(expected_size, int) and expected_size:
-                if len(data) != expected_size:
+                if size != expected_size:
                     raise ValueError("size mismatch")
             log(f"asset ok: {candidate}")
-            return data
+            return part
         except Exception as exc:
             errors.append(f"{candidate}: {exc}")
             log(f"asset fail: {candidate}: {exc}")
+            try:
+                part.unlink()
+            except OSError:
+                pass
     raise OSError("; ".join(errors[-3:]))
 
 
@@ -239,10 +273,10 @@ def check_and_update(log, on_ready=None, delay: float = 3.0) -> None:
         if not _verify_signature(entry, str(manifest.get("signature") or "")):
             log("signature invalid; refusing update")
             return
-        data = _download(entry, log)
         target = exe_path()
+        part = _download(entry, log, target)
         new = target.with_name(target.stem + "-new.exe")
-        new.write_bytes(data)
+        part.replace(new)
         marker = updates_dir() / f"started-{remote}.ok"
         batch = _write_batch(target, new, os.getpid(), marker)
         log(f"staged {remote}; restarting")
