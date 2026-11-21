@@ -15,6 +15,11 @@ DEFAULTS = {
         "silent": True,
         "auto_run": False,
     },
+    "wizard": {
+        "done": False,
+        "seat": "stand",
+        "profile": "",
+    },
     "security": {
         "password_hash": "",
         "password_salt": "",
@@ -80,6 +85,8 @@ DEFAULTS = {
         "box": [],
         "calibration": [],
         "calibration_size": [],
+        "self_calib": True,
+        "self_calib_offset": [],
     },
     "pose": {
         "model_complexity": 1,

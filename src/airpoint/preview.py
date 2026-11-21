@@ -117,6 +117,9 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     toggle_button.pack(side="left")
     box_button = ttk.Button(bar, text="画框")
     box_button.pack(side="left", padx=6)
+    ttk.Button(bar, text="建议框", command=lambda: suggest()).pack(
+        side="left", padx=(0, 6)
+    )
     ttk.Button(bar, text="清除框", command=lambda: clear_box()).pack(
         side="left", padx=(0, 6)
     )
@@ -136,6 +139,9 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         bar, text="导出诊断", command=lambda: export_diag()
     ).pack(side="left", padx=(0, 6))
     ttk.Button(bar, text="勘测模式", command=lambda: survey()).pack(
+        side="left", padx=(0, 6)
+    )
+    ttk.Button(bar, text="首次向导", command=lambda: wizard()).pack(
         side="left", padx=(0, 6)
     )
     ttk.Button(bar, text="关闭", command=lambda: close()).pack(side="right")
@@ -186,6 +192,11 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         from .survey import open_survey
 
         open_survey(win.master, bus, controller, config)
+
+    def wizard() -> None:
+        from .wizard import open_wizard
+
+        open_wizard(win.master, bus, controller, config)
 
     def calibrate() -> None:
         if not controller.active:
@@ -246,6 +257,45 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         config.set("pointer.box", [])
         config.save()
         draw_box()
+
+    def suggest() -> None:
+        from .autobox import suggest_box
+
+        _frame, stats = bus.latest()
+        body = stats.get("body")
+        if not body:
+            messagebox.showinfo(
+                "OpticalInputSvc",
+                "还没有识别到人。请站到镜头前、全身入画，等预览里出现骨架后再试。",
+                parent=win,
+            )
+            return
+        width = float(stats.get("width", 0) or 0)
+        height = float(stats.get("height", 0) or 0)
+        frame_aspect = width / height if width > 0 and height > 0 else 16 / 9
+        screen_aspect = win.winfo_screenwidth() / max(
+            1, win.winfo_screenheight()
+        )
+        box = suggest_box(
+            [(body[0], body[1]), (body[2], body[3])],
+            frame_aspect=frame_aspect,
+            screen_aspect=screen_aspect,
+        )
+        if box is None:
+            messagebox.showinfo(
+                "OpticalInputSvc", "人框太小，请靠近一点再试。", parent=win
+            )
+            return
+        config.set("pointer.box", box)
+        config.set("pointer.mode", "absolute")
+        config.save()
+        draw_box()
+        messagebox.showinfo(
+            "OpticalInputSvc",
+            "已按人框生成活动区，并切到绝对模式。\n"
+            "站好再按一次「建议框」可以重新贴合；也可以手动画框微调。",
+            parent=win,
+        )
 
     def on_press(event) -> None:
         nonlocal drag_start

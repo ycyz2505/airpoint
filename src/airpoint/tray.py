@@ -27,6 +27,7 @@ def create_icon(
     on_recalibrate=None,
     on_data_dir=None,
     on_survey=None,
+    on_wizard=None,
 ) -> pystray.Icon:
     items = [
         pystray.MenuItem(
@@ -43,6 +44,8 @@ def create_icon(
     ]
     if on_survey is not None:
         items.append(pystray.MenuItem("勘测模式…", lambda: on_survey()))
+    if on_wizard is not None:
+        items.append(pystray.MenuItem("首次向导…", lambda: on_wizard()))
     if on_recalibrate is not None:
         items.append(
             pystray.MenuItem("重新标定…", lambda: on_recalibrate())

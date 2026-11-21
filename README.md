@@ -12,7 +12,8 @@ meters away.
 Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
-and survey mode.
+survey mode, a first-run wizard, a suggested mapping box, online
+self-calibration, and double-click detection.
 
 ## Planned capabilities
 
@@ -99,7 +100,23 @@ automatic updates.
 - Survey mode: a fullscreen camera view with large statistics and a 30-second
   test that measures shoulder width, palm size, drop rate, and confidence, then
   suggests a tier (with the reason) and can lock it in one click.
-- Tray additions: **勘测模式…**, **重新标定…**, and **打开数据目录**.
+- Tray additions: **首次向导…**, **勘测模式…**, **重新标定…**, and **打开数据目录**.
+- Mapping-box suggestion: the preview's **建议框** button takes the pose body
+  bounding rect, pads it, and snaps it to the screen aspect, so the box can be
+  set from six metres without drawing it by hand.
+- First-run wizard: seven steps (camera, hand visible, seat, active area,
+  calibration, gestures, save) with a live camera view, a 10-second measurement
+  that suggests a tier, one-click box creation, calibration, and a seat profile.
+  It opens automatically after the management password is first set.
+- Double click: two taps within 350 ms at nearly the same spot send a
+  double-click instead of two single clicks.
+- Online self-calibration in absolute mode: while the hand rests before a
+  click, the difference between where it mapped and where it settled nudges a
+  bounded screen-space offset (2 px per sample, 60 px total), so small pointing
+  bias disappears with use. Toggle with **点击自动校正偏移**.
+- Gesture press freezes the cursor: drag distance is measured from the hand, so
+  a long press stays a right click instead of drifting into a drag.
+- Watchdog: a held button is released after 5 seconds even if the hand is lost.
 
 ## Settings
 

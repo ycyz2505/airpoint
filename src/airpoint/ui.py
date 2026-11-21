@@ -164,6 +164,7 @@ SECTIONS = [
             ("pointer.write_mode", "书写平滑", "bool"),
             ("pointer.write_smoothing", "书写平滑强度", "float"),
             ("pointer.write_min_step_px", "书写最小步长（px）", "float"),
+            ("pointer.self_calib", "点击自动校正偏移", "bool"),
             ("pointer.gain_relative", "相对增益", "float"),
             ("pointer.deadzone_px", "死区（px）", "float"),
             ("pointer.prediction_ms", "预测（ms）", "int"),

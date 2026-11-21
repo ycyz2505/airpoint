@@ -224,6 +224,159 @@ class SurveyTests(unittest.TestCase):
         self.assertEqual(summary["samples"], 2)
 
 
+class AutoBoxTests(unittest.TestCase):
+    def test_box_covers_body_with_padding(self):
+        from airpoint.autobox import suggest_box
+
+        box = suggest_box([(0.4, 0.2), (0.6, 0.8)], pad=0.10)
+        self.assertLess(box[0], 0.4)
+        self.assertGreater(box[2], 0.6)
+        self.assertLess(box[1], 0.2)
+        self.assertGreater(box[3], 0.8)
+
+    def test_box_keeps_equal_gain_on_both_axes(self):
+        from airpoint.autobox import suggest_box
+
+        box = suggest_box(
+            [(0.45, 0.2), (0.55, 0.9)], frame_aspect=4 / 3,
+            screen_aspect=16 / 9,
+        )
+        width = box[2] - box[0]
+        height = box[3] - box[1]
+        self.assertAlmostEqual(width / height, (16 / 9) / (4 / 3), places=2)
+
+    def test_box_stays_inside_frame(self):
+        from airpoint.autobox import suggest_box
+
+        box = suggest_box([(0.02, 0.05), (0.98, 0.95)], pad=0.30)
+        self.assertGreaterEqual(box[0], 0.0)
+        self.assertGreaterEqual(box[1], 0.0)
+        self.assertLessEqual(box[2], 1.0)
+        self.assertLessEqual(box[3], 1.0)
+
+    def test_needs_two_points(self):
+        from airpoint.autobox import suggest_box
+
+        self.assertIsNone(suggest_box([(0.5, 0.5)]))
+
+
+class WizardTests(unittest.TestCase):
+    def test_module_imports_without_camera_stack(self):
+        import airpoint.wizard as wizard
+
+        self.assertEqual(wizard.STEPS[0], "摄像头")
+        self.assertEqual(len(wizard.STEPS), 7)
+
+    def test_defaults_carry_wizard_section(self):
+        from airpoint.config import DEFAULTS
+
+        self.assertFalse(DEFAULTS["wizard"]["done"])
+        self.assertEqual(DEFAULTS["wizard"]["seat"], "stand")
+
+    def test_wizard_flag_survives_roundtrip(self):
+        with TempConfig() as config:
+            config.set("wizard.done", True)
+            config.set("wizard.profile", "教室")
+            config.save()
+            again = Config(config.path)
+            self.assertTrue(again.get("wizard.done"))
+            self.assertEqual(again.get("wizard.profile"), "教室")
+
+
+    def test_second_tap_is_double_click(self):
+        with TempConfig() as config:
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100))
+            first = engine.update("up", 10.1, (100, 100))
+            engine.update("down", 10.2, (101, 100))
+            second = engine.update("up", 10.25, (101, 100))
+            self.assertTrue(first.left_click)
+            self.assertFalse(first.double_click)
+            self.assertTrue(second.double_click)
+            self.assertFalse(second.left_click)
+
+    def test_slow_second_tap_is_single_click(self):
+        with TempConfig() as config:
+            config.set("gesture.double_click_ms", 300)
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100))
+            engine.update("up", 10.1, (100, 100))
+            engine.update("down", 11.0, (100, 100))
+            second = engine.update("up", 11.1, (100, 100))
+            self.assertTrue(second.left_click)
+            self.assertFalse(second.double_click)
+
+    def test_distant_second_tap_is_single_click(self):
+        with TempConfig() as config:
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100))
+            engine.update("up", 10.1, (100, 100))
+            engine.update("down", 10.2, (400, 400))
+            second = engine.update("up", 10.25, (400, 400))
+            self.assertTrue(second.left_click)
+            self.assertFalse(second.double_click)
+
+
+    def test_drag_is_measured_against_hand_not_frozen_cursor(self):
+        with TempConfig() as config:
+            engine = GestureEngine(config, lambda message: None)
+            frozen = (100, 100)
+            engine.update("down", 10.0, frozen, (100, 100))
+            out = engine.update("down", 10.1, frozen, (160, 100))
+            self.assertTrue(out.left_down)
+            self.assertEqual(engine.state, "Dragging")
+
+    def test_frozen_cursor_does_not_break_hold(self):
+        with TempConfig() as config:
+            config.set("gesture.right_click_ms", 1000)
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100), (100, 100))
+            out = engine.update("down", 11.2, (100, 100), (101, 100))
+            self.assertTrue(out.right_click)
+
+
+class SelfCalibrationTests(unittest.TestCase):
+    def test_offset_moves_toward_the_error(self):
+        from airpoint.selfcal import SelfCalibrator
+
+        calibrator = SelfCalibrator()
+        calibrator.add((100.0, 100.0), (110.0, 90.0))
+        self.assertGreater(calibrator.x, 0.0)
+        self.assertLess(calibrator.y, 0.0)
+        self.assertLessEqual(abs(calibrator.x), 2.0)
+        self.assertLessEqual(abs(calibrator.y), 2.0)
+
+    def test_step_is_capped(self):
+        from airpoint.selfcal import SelfCalibrator
+
+        calibrator = SelfCalibrator()
+        calibrator.add((0.0, 0.0), (5000.0, 5000.0))
+        self.assertLessEqual(calibrator.x, 2.0)
+        self.assertLessEqual(calibrator.y, 2.0)
+
+    def test_total_offset_is_bounded(self):
+        from airpoint.selfcal import SelfCalibrator
+
+        calibrator = SelfCalibrator()
+        for _ in range(500):
+            calibrator.add((0.0, 0.0), (5000.0, 5000.0))
+        self.assertLessEqual(calibrator.x, 60.0)
+        self.assertLessEqual(calibrator.y, 60.0)
+
+    def test_apply_shifts_the_target(self):
+        from airpoint.selfcal import SelfCalibrator
+
+        calibrator = SelfCalibrator([4.0, -3.0])
+        self.assertEqual(calibrator.apply((100.0, 200.0)), (104.0, 197.0))
+        self.assertIsNone(calibrator.apply(None))
+
+    def test_stored_offset_is_restored(self):
+        from airpoint.selfcal import SelfCalibrator
+
+        calibrator = SelfCalibrator([1.5, -2.5])
+        self.assertEqual(calibrator.offset, [1.5, -2.5])
+
+
 class MagnifierTests(unittest.TestCase):
     def test_source_rect_centres_on_cursor(self):
         from airpoint.magnifier import source_rect

@@ -133,6 +133,32 @@ class RelativePointer:
         return dx, dy
 
 
+def map_point(x, y, box, screen_w, screen_h, calibration=None):
+    """Map a normalized frame point inside ``box`` to screen pixels."""
+    if not box or len(box) != 4:
+        return None
+    x0, y0, x1, y1 = [float(item) for item in box]
+    if x1 <= x0 or y1 <= y0:
+        return None
+    if not (x0 <= x <= x1 and y0 <= y <= y1):
+        return None
+
+    if calibration is not None and len(calibration) == 9:
+        h = [float(item) for item in calibration]
+        denominator = h[6] * x + h[7] * y + h[8]
+        if abs(denominator) < 1e-9:
+            return None
+        u = (h[0] * x + h[1] * y + h[2]) / denominator
+        v = (h[3] * x + h[4] * y + h[5]) / denominator
+        return u, v
+
+    u = (x - x0) / (x1 - x0)
+    v = (y - y0) / (y1 - y0)
+    u = max(0.0, min(1.0, u))
+    v = max(0.0, min(1.0, v))
+    return u * screen_w, v * screen_h
+
+
 class AbsolutePointer:
     def __init__(self, config):
         self.config = config
@@ -156,27 +182,4 @@ class AbsolutePointer:
     ):
         fx = self._fx(x, t)
         fy = self._fy(y, t)
-
-        if not box or len(box) != 4:
-            return None
-        x0, y0, x1, y1 = [float(item) for item in box]
-        if x1 <= x0 or y1 <= y0:
-            return None
-
-        if not (x0 <= x <= x1 and y0 <= y <= y1):
-            return None
-
-        if calibration is not None and len(calibration) == 9:
-            h = [float(item) for item in calibration]
-            denominator = h[6] * fx + h[7] * fy + h[8]
-            if abs(denominator) < 1e-9:
-                return None
-            u = (h[0] * fx + h[1] * fy + h[2]) / denominator
-            v = (h[3] * fx + h[4] * fy + h[5]) / denominator
-            return u, v
-
-        u = (fx - x0) / (x1 - x0)
-        v = (fy - y0) / (y1 - y0)
-        u = max(0.0, min(1.0, u))
-        v = max(0.0, min(1.0, v))
-        return u * screen_w, v * screen_h
+        return map_point(fx, fy, box, screen_w, screen_h, calibration)

@@ -13,10 +13,11 @@ from .diagnostics import Diagnostics
 from .gestures import GestureEngine
 from .hands import HandTracker
 from .paths import log_dir
-from .pointer import AbsolutePointer, RelativePointer, safe_zone
+from .pointer import AbsolutePointer, RelativePointer, map_point, safe_zone
 from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
+from .selfcal import SelfCalibrator
 from .tiers import TierEngine
 from .writing import StrokeSmoother
 
@@ -52,6 +53,11 @@ class Controller:
         self._record_path = None
         self.governor = Governor(config, log)
         self._stroke = StrokeSmoother(config)
+        self._selfcal = SelfCalibrator(config.get("pointer.self_calib_offset", []))
+        self._settle = deque(maxlen=8)
+        self._last_target = None
+        self._offset_dirty = False
+        self._held_since = 0.0
         self._paused_notice = False
         self._writing = False
         self._diag = Diagnostics(1800)
@@ -78,6 +84,12 @@ class Controller:
         if self.recorder.active:
             self.recorder.stop()
         inject.release_all()
+        if self._offset_dirty:
+            try:
+                self.config.save()
+                self._offset_dirty = False
+            except OSError as exc:
+                self.log(f"self-calibration offset not saved: {exc}")
         self.log("controller stopped")
 
     @property
@@ -139,6 +151,25 @@ class Controller:
         self.log(f"diagnostics written: {target} ({len(self._diag)} rows)")
         return target
 
+    def _learn_offset(self, mode, box, calibration, screen_w, screen_h,
+                      cursor) -> None:
+        if mode != "absolute" or not bool(
+            self.config.get("pointer.self_calib", True)
+        ):
+            return
+        if len(self._settle) < 4:
+            return
+        sx = sum(item[0] for item in self._settle) / len(self._settle)
+        sy = sum(item[1] for item in self._settle) / len(self._settle)
+        settled = map_point(sx, sy, box, screen_w, screen_h, calibration)
+        if settled is None:
+            return
+        before = self._selfcal.offset
+        self._selfcal.add(self._last_target or cursor, settled)
+        if self._selfcal.offset != before:
+            self.config.set("pointer.self_calib_offset", self._selfcal.offset)
+            self._offset_dirty = True
+
     def _run(self) -> None:
         camera = Camera(self.config, self.log)
         pose = PoseTracker(self.config, self.log)
@@ -184,6 +215,9 @@ class Controller:
                 last_gesture_seen = 0.0
                 last_click_result = None
                 self._stroke.reset()
+                self._settle.clear()
+                self._last_target = None
+                self._held_since = 0.0
                 self._paused_notice = False
                 self._window_start = time.time()
 
@@ -454,6 +488,7 @@ class Controller:
             self._writing = writing
 
             if point is not None and inside and not calibrating:
+                frozen = gestures.state == "Pending"
                 if mode == "absolute":
                     target = absolute.update(
                         point[0],
@@ -465,18 +500,22 @@ class Controller:
                         calibration=active_calibration,
                     )
                     if target is not None:
-                        cx, cy = target
-                        if writing:
-                            cx, cy = self._stroke.update(cx, cy, True)
-                        else:
-                            self._stroke.reset()
-                        inject.set_cursor(cx, cy)
+                        self._last_target = target
+                        if not frozen:
+                            cx, cy = self._selfcal.apply(target)
+                            if writing:
+                                cx, cy = self._stroke.update(cx, cy, True)
+                            else:
+                                self._stroke.reset()
+                            inject.set_cursor(cx, cy)
                 else:
                     if not self._inside:
                         pointer.reset()
                     dx, dy = pointer.update(
                         point[0], point[1], now, screen_w, screen_h
                     )
+                    if frozen:
+                        dx = dy = 0.0
                     if dx or dy:
                         x, y = inject.get_cursor()
                         target_x = x + dx + self._carry_x
@@ -521,10 +560,30 @@ class Controller:
 
             self._inside = inside
 
+            if point is not None and inside and not calibrating:
+                self._settle.append((point[0], point[1]))
+            else:
+                self._settle.clear()
+
             if not calibrating:
                 cursor = inject.get_cursor()
-                out = gestures.update(kind, now, cursor)
+                ref = cursor
+                if (
+                    mode == "absolute"
+                    and self._last_target is not None
+                    and point is not None
+                ):
+                    shifted = self._selfcal.apply(self._last_target)
+                    ref = (int(round(shifted[0])), int(round(shifted[1])))
+                out = gestures.update(kind, now, cursor, ref)
                 if out.left_click:
+                    inject.button("left", True)
+                    inject.button("left", False)
+                    self._learn_offset(mode, box, active_calibration, screen_w,
+                                       screen_h, cursor)
+                if out.double_click:
+                    inject.button("left", True)
+                    inject.button("left", False)
                     inject.button("left", True)
                     inject.button("left", False)
                 if out.right_click:
@@ -532,8 +591,18 @@ class Controller:
                     inject.button("right", False)
                 if out.left_down:
                     inject.button("left", True)
+                    self._held_since = now
                 if out.left_up:
                     inject.button("left", False)
+                    self._held_since = 0.0
+
+                if self._held_since and now - self._held_since > 5.0:
+                    inject.release_all()
+                    gestures.cancel()
+                    gestures.reset()
+                    self._held_since = 0.0
+                    self._writing = False
+                    self.log("watchdog released a button held over 5 s")
 
                 if (
                     gestures.state != "Idle"
@@ -543,6 +612,7 @@ class Controller:
                     cancel = gestures.cancel()
                     if cancel.left_up:
                         inject.button("left", False)
+                        self._held_since = 0.0
 
             elapsed = max(0.5, now - self._window_start)
             fps = self._frames / elapsed
@@ -633,6 +703,7 @@ class Controller:
                         ),
                         "drop": drop,
                         "shoulder": shoulder,
+                        "body": pose.bounds(),
                         "mode": mode,
                         "inside": inside,
                         "calibrating": calibrating,

@@ -156,6 +156,8 @@ def main() -> None:
         password = ask_new_password(root)
         if password:
             security.set_password(password)
+            if not bool(config.get("wizard.done", False)):
+                open_wizard_now(root)
 
     def locked(root, action) -> None:
         if not security.has_password:
@@ -294,6 +296,14 @@ def main() -> None:
 
         open_survey(root, controller.preview, controller, config)
 
+    def on_wizard() -> None:
+        ui.post(lambda root: locked(root, lambda: open_wizard_now(root)))
+
+    def open_wizard_now(root) -> None:
+        from .wizard import open_wizard
+
+        open_wizard(root, controller.preview, controller, config)
+
     def on_data_dir() -> None:
         ui.post(lambda root: locked(root, lambda: open_data_dir(root)))
 
@@ -315,6 +325,7 @@ def main() -> None:
         on_recalibrate=on_recalibrate,
         on_data_dir=on_data_dir,
         on_survey=on_survey,
+        on_wizard=on_wizard,
     )
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
