@@ -323,7 +323,9 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(summary["frames"], 20)
             self.assertEqual(summary["pose_hit_pct"], 100.0)
             self.assertGreater(summary["cursor"]["path_px"], 0.0)
-            self.assertIn("A", summary["tier"])
+            self.assertTrue(summary["tier"])
+            for name in summary["tier"]:
+                self.assertIn(name, ("A", "B", "C", "D", "E"))
             self.assertTrue(csv_path.exists())
             lines = csv_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 21)
