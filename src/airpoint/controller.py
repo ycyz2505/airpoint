@@ -625,6 +625,7 @@ class Controller:
                         calibration=active_calibration,
                     )
                     if target is not None:
+                        previous = self._last_target
                         self._last_target = target
                         if not frozen:
                             cx, cy = self._selfcal.apply(target)
@@ -632,9 +633,11 @@ class Controller:
                                 cx, cy = self._stroke.update(cx, cy, True)
                             else:
                                 self._stroke.reset()
-                            moved = cy - inject.get_cursor()[1]
                             inject.set_cursor(cx, cy)
-                            self._edge_scroll(cy, moved, screen_h, now)
+                            # The cursor stops at the screen edge, so the
+                            # scroll has to follow the hand's own push.
+                            push = target[1] - previous[1] if previous else 0.0
+                            self._edge_scroll(cy, push * screen_h, screen_h, now)
                 else:
                     if not self._inside:
                         pointer.reset()
