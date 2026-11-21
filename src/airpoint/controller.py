@@ -544,6 +544,12 @@ class Controller:
                         "pinch" if scheme == "single" else "fist"
                     )
                 hands_on = True
+            if level >= 3:
+                # L3/L4 drop the hand model, so the only point left is the
+                # wrist; feeding that into an absolute map would jump the
+                # cursor around. Fall back to relative wrist control.
+                mode = "relative"
+                hands_on = False
             click_hand = "left" if moving_hand == "right" else "right"
 
             moving_result = None

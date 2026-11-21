@@ -186,7 +186,9 @@ class TierEngine:
                     scheme = "single"
                 if click == "auto":
                     click = "pinch" if scheme == "single" else "fist"
-                hands = True
+            # ``hands`` stays the tier's own call: it is what decides whether
+            # the hand model runs at all, and E has to keep it off no matter
+            # which gesture preference the user picked.
         return TierState(
             name=self.current,
             mode=mode,

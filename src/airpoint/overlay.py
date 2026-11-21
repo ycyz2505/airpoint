@@ -137,7 +137,9 @@ class ControlBar:
         except ValueError:
             index = 0
         self.config.set("pointer.mode", order[(index + 1) % len(order)])
+        self.config.save()
         self.controller.reload()
+        self._refresh()
 
     def _cycle_tier(self) -> None:
         order = ["", "A", "B", "C", "D", "E"]

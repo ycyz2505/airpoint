@@ -213,7 +213,9 @@ class TierTests(unittest.TestCase):
             state, _ = self._feed(engine, 0.02, 12.0, 0.0, 1.0)
             self.assertEqual(state.name, "E")
             self.assertEqual(state.scheme, "single")
-            self.assertTrue(state.hands)
+            # The gesture preference must not switch the hand model back on;
+            # E runs on the wrist alone and that is a cost decision.
+            self.assertFalse(state.hands)
 
     def test_downgrade_waits(self):
         with TempConfig() as config:
@@ -778,6 +780,43 @@ class UpdateTests(unittest.TestCase):
         self.assertTrue(_is_newer("0.10.3", "0.10.2"))
         self.assertFalse(_is_newer("0.10.2", "0.10.2"))
         self.assertFalse(_is_newer("0.9.9", "0.10.0"))
+
+
+class GovernorTests(unittest.TestCase):
+    def test_ladder_is_monotonic_and_capped(self):
+        from airpoint.performance import Governor
+
+        with TempConfig() as config:
+            config.set("performance.rss_limit_mb", 0)
+            governor = Governor(config, lambda message: None)
+            governor._last_sample = 0.0
+            seen = []
+            now = 100.0
+            for _ in range(10):
+                now += 3.0
+                seen.append(governor.update(now))
+            self.assertEqual(seen[:6], [1, 2, 3, 4, 5, 5])
+            self.assertEqual(governor.name, "L5 暂停")
+            self.assertFalse(governor.hands_allowed())
+            self.assertEqual(governor.frame_divisor(), 3)
+
+    def test_low_mode_locks_the_wrist_only_rung(self):
+        from airpoint.performance import Governor
+
+        with TempConfig() as config:
+            config.set("performance.mode", "low")
+            governor = Governor(config, lambda message: None)
+            self.assertEqual(governor.update(0.0), 3)
+            self.assertFalse(governor.hands_allowed())
+
+    def test_high_mode_never_degrades(self):
+        from airpoint.performance import Governor
+
+        with TempConfig() as config:
+            config.set("performance.mode", "high")
+            config.set("performance.cpu_limit_pct", 0)
+            governor = Governor(config, lambda message: None)
+            self.assertEqual(governor.update(100.0), 0)
 
 
 class SecurityTests(unittest.TestCase):

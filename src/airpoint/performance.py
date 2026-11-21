@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ctypes
 import os
-import time
 from ctypes import wintypes
 
 
@@ -79,7 +78,7 @@ class Governor:
     def name(self) -> str:
         return self.LEVELS[self.level]
 
-    def _sample(self) -> None:
+    def _sample(self, now: float) -> None:
         creation = FILETIME()
         exit_time = FILETIME()
         kernel = FILETIME()
@@ -92,7 +91,6 @@ class Governor:
             ctypes.byref(user),
         ):
             total = _filetime_value(kernel) + _filetime_value(user)
-            now = time.time()
             if self._last_cpu is not None and self._last_sample:
                 elapsed = max(1e-6, now - self._last_sample)
                 delta = max(0, total - self._last_cpu) / 1e7
@@ -118,7 +116,7 @@ class Governor:
 
         if now - self._last_sample < 2.0:
             return self.level
-        self._sample()
+        self._sample(now)
 
         cpu_limit = float(self.config.get("performance.cpu_limit_pct", 20))
         rss_limit = float(self.config.get("performance.rss_limit_mb", 600))
