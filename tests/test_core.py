@@ -415,7 +415,7 @@ class CalibrationTests(unittest.TestCase):
 
         from airpoint.calibrate import TARGETS
 
-        screen = np.array([[1920.0, 1080.0]])
+        screen = np.array([1920.0, 1080.0])
         dst = np.array(
             [[x * 1920.0, y * 1080.0] for x, y in TARGETS], dtype=np.float64
         )
@@ -427,7 +427,7 @@ class CalibrationTests(unittest.TestCase):
         ).reshape(-1, 2)
         if outlier:
             src = src.copy()
-            src[4] += (0.06, -0.04) * screen
+            src[4] += (0.12, -0.08) * screen
         return src, dst
 
     def test_nine_targets_form_a_grid(self):
