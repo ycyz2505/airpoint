@@ -131,6 +131,8 @@ automatic updates.
 - Big cursor: **大光标** raises the Windows cursor size for the session
   (1–8x) so it is visible from the back row, and the previous size is put back
   on exit. The cursor is never hidden or redrawn.
+- Elevated windows: when Windows refuses injected input (a UIPI-blocked
+  window), the status line and HUD say so instead of failing silently.
 
 ## Settings
 

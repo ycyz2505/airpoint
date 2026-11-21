@@ -63,6 +63,8 @@ class Controller:
         self._writing = False
         self._two_hand = TwoHandOpen(config)
         self._bar_request = 0
+        self._inject_blocked = False
+        self._blocked_log = 0.0
         self._diag = Diagnostics(1800)
 
     def start(self) -> None:
@@ -106,6 +108,10 @@ class Controller:
     @property
     def hold_progress(self) -> float:
         return self._hold_progress
+
+    @property
+    def inject_blocked(self) -> bool:
+        return self._inject_blocked
 
     def take_bar_request(self) -> bool:
         """True once per two-hand request to toggle the control bar."""
@@ -165,6 +171,20 @@ class Controller:
         target = self._diag.export(path, folder=log_dir())
         self.log(f"diagnostics written: {target} ({len(self._diag)} rows)")
         return target
+
+    def _button(self, name: str, down: bool, now: float) -> None:
+        """Send a button event, noting when Windows refused it.
+
+        An elevated window blocks injected input under UIPI; SendInput then
+        reports zero events, which is the only signal available.
+        """
+        if inject.button(name, down):
+            self._inject_blocked = False
+            return
+        self._inject_blocked = True
+        if now - self._blocked_log > 10.0:
+            self._blocked_log = now
+            self.log("injection blocked (elevated window?)")
 
     def _learn_offset(self, mode, box, calibration, screen_w, screen_h,
                       cursor) -> None:
@@ -601,23 +621,23 @@ class Controller:
                 out = gestures.update(kind, now, cursor, ref)
                 self._hold_progress = gestures.hold_progress(now)
                 if out.left_click:
-                    inject.button("left", True)
-                    inject.button("left", False)
+                    self._button("left", True, now)
+                    self._button("left", False, now)
                     self._learn_offset(mode, box, active_calibration, screen_w,
                                        screen_h, cursor)
                 if out.double_click:
-                    inject.button("left", True)
-                    inject.button("left", False)
-                    inject.button("left", True)
-                    inject.button("left", False)
+                    self._button("left", True, now)
+                    self._button("left", False, now)
+                    self._button("left", True, now)
+                    self._button("left", False, now)
                 if out.right_click:
-                    inject.button("right", True)
-                    inject.button("right", False)
+                    self._button("right", True, now)
+                    self._button("right", False, now)
                 if out.left_down:
-                    inject.button("left", True)
+                    self._button("left", True, now)
                     self._held_since = now
                 if out.left_up:
-                    inject.button("left", False)
+                    self._button("left", False, now)
                     self._held_since = 0.0
 
                 if self._held_since and now - self._held_since > 5.0:
@@ -701,6 +721,7 @@ class Controller:
                         "presentation": bool(
                             self.config.get("overlay.presentation", False)
                         ),
+                        "blocked": self._inject_blocked,
                     })
                 self.preview.publish(
                     preview_frame,

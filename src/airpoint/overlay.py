@@ -379,6 +379,8 @@ class ScreenHud:
                 text = "● 录制"
             elif not active:
                 text = "● 暂停"
+            elif bool(getattr(self.controller, "inject_blocked", False)):
+                text = "● 目标窗口提权，无法点击"
             if text != self._text:
                 self._text = text
                 self._canvas.itemconfigure(
@@ -427,6 +429,8 @@ def draw_status(frame, stats: dict) -> None:
     )
     if stats.get("presentation"):
         text = "DEMO  " + text
+    if stats.get("blocked"):
+        text += "  目标窗口提权，无法点击"
     cv2.putText(
         frame, text, (8, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1,
         cv2.LINE_AA,

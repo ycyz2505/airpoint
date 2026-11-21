@@ -49,17 +49,18 @@ user32.SendInput.argtypes = [
 user32.SendInput.restype = wintypes.UINT
 
 
-def _mouse(flags: int, data: int = 0) -> None:
+def _mouse(flags: int, data: int = 0) -> bool:
     item = INPUT()
     item.type = INPUT_MOUSE
     item.mi.dwFlags = flags
     item.mi.mouseData = data & 0xFFFFFFFF
     item.mi.dwExtraInfo = MOUSE_MARKER
-    user32.SendInput(1, ctypes.byref(item), ctypes.sizeof(INPUT))
+    sent = user32.SendInput(1, ctypes.byref(item), ctypes.sizeof(INPUT))
+    return bool(sent)
 
 
-def set_cursor(x: float, y: float) -> None:
-    user32.SetCursorPos(int(round(x)), int(round(y)))
+def set_cursor(x: float, y: float) -> bool:
+    return bool(user32.SetCursorPos(int(round(x)), int(round(y))))
 
 
 def get_cursor() -> tuple[int, int]:
@@ -73,19 +74,19 @@ def screen_size() -> tuple[int, int]:
     return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
 
 
-def button(name: str, down: bool) -> None:
+def button(name: str, down: bool) -> bool:
     flags = {
         "left": (MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP),
         "right": (MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP),
         "middle": (MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP),
     }.get(name)
     if flags is None:
-        return
-    _mouse(flags[0] if down else flags[1])
+        return False
+    return _mouse(flags[0] if down else flags[1])
 
 
-def wheel(delta: int) -> None:
-    _mouse(MOUSEEVENTF_WHEEL, delta)
+def wheel(delta: int) -> bool:
+    return _mouse(MOUSEEVENTF_WHEEL, delta)
 
 
 def release_all() -> None:
