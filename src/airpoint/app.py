@@ -421,6 +421,7 @@ def main() -> None:
         on_data_dir=on_data_dir,
         on_survey=on_survey,
         on_wizard=on_wizard,
+        describe=controller.describe,
     )
     marker = updates_dir() / f"started-{__version__}.ok"
     try:

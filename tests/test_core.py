@@ -677,6 +677,56 @@ class CaptureTargetTests(unittest.TestCase):
             self.assertEqual(targets_for(config), [(1920, 1080)])
 
 
+class LoggingTests(unittest.TestCase):
+    def test_rotation_keeps_a_backup(self):
+        import airpoint.logging_util as logging_util
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            original = logging_util.log_dir
+            logging_util.log_dir = lambda: folder
+            try:
+                log = logging_util.make_logger("unit")
+                log("first")
+                (folder / "unit.log").write_text(
+                    "x" * (1024 * 1024), encoding="utf-8"
+                )
+                log("second")
+            finally:
+                logging_util.log_dir = original
+            self.assertTrue((folder / "unit.1.log").exists())
+            self.assertIn(
+                "second", (folder / "unit.log").read_text(encoding="utf-8")
+            )
+            self.assertGreater((folder / "unit.1.log").stat().st_size, 0)
+
+
+class TrayTitleTests(unittest.TestCase):
+    def test_title_follows_state(self):
+        from airpoint import tray
+
+        paused = (lambda: False, lambda: False)
+        active = (lambda: True, lambda: False)
+        recording = (lambda: True, lambda: True)
+        self.assertEqual(tray._title(*paused), "OpticalInputSvc · 已暂停")
+        self.assertEqual(tray._title(*active), "OpticalInputSvc · 运行中")
+        self.assertEqual(tray._title(*recording), "OpticalInputSvc · 录制中")
+
+    def test_describe_reports_tier_mode_and_palm(self):
+        from airpoint.controller import Controller
+
+        with TempConfig() as config:
+            config.set("pointer.mode", "absolute")
+            controller = Controller(config, lambda message: None)
+            controller._last_palm_px = 31.6
+            text = controller.describe()
+            self.assertIn("绝对", text)
+            self.assertIn("已暂停", text)
+            self.assertIn("31px", text)
+            self.assertIn(f"{controller.tier} 档", text)
+            self.assertEqual(controller.describe(), text)
+
+
 class UpdateTests(unittest.TestCase):
     def test_version_compare(self):
         from airpoint.updater import _is_newer
@@ -687,6 +737,28 @@ class UpdateTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_hot_reload_picks_up_external_edit(self):
+        with TempConfig() as config:
+            config.set("pointer.hand", "left")
+            config.save()
+            config.path.write_text(
+                json.dumps({"pointer": {"hand": "right", "beta": 0.7}}),
+                encoding="utf-8",
+            )
+            os.utime(config.path, None)
+            self.assertTrue(config.reload_if_changed())
+            self.assertEqual(config.get("pointer.hand"), "right")
+            self.assertEqual(config.get("pointer.beta"), 0.7)
+            # Untouched keys keep their previous value, not the default.
+            self.assertEqual(config.get("camera.device"), "auto")
+            self.assertFalse(config.reload_if_changed())
+
+    def test_hot_reload_survives_a_broken_file(self):
+        with TempConfig() as config:
+            config.path.write_text("{ broken", encoding="utf-8")
+            self.assertFalse(config.reload_if_changed())
+            self.assertEqual(config.get("pointer.hand"), "right")
+
     def test_dotted_get_set_and_roundtrip(self):
         with TempConfig() as config:
             self.assertEqual(config.get("pointer.hand"), "right")

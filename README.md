@@ -90,6 +90,13 @@ automatic updates.
   are opt-in so the interaction does not flip underneath the user.
 - Speed-adaptive gain and sub-pixel cursor accumulation for slow movement.
 - All mouse buttons are released on pause, exit, or error.
+- The tray tooltip tracks the real state (`运行中` / `已暂停` / `录制中`) even
+  with the menu closed, and the menu opens with a greyed-out status line such
+  as `B 档 · 绝对 · 运行中 · 手掌 34px`.
+- `config.json` is watched for changes: editing it by hand (or syncing it from
+  another machine) reloads it live and reopens the camera, and a half-written
+  file is ignored until it parses. Logs roll to `app.1.log` instead of being
+  deleted, so the run before a crash is still there.
 - Writing magnifier: a small always-on-top, click-through window follows the
   cursor while a button is held and shows a 2.5x (adjustable) view of the
   screen area under it, so the stroke lands where intended.

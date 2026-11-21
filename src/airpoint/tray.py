@@ -1,7 +1,32 @@
 from __future__ import annotations
 
+import threading
+import time
+
 import pystray
 from PIL import Image, ImageDraw
+
+NAME = "OpticalInputSvc"
+
+
+def _title(is_active, is_recording) -> str:
+    if is_recording():
+        return f"{NAME} · 录制中"
+    return f"{NAME} · 运行中" if is_active() else f"{NAME} · 已暂停"
+
+
+def _sync_title(icon, is_active, is_recording) -> None:
+    """Keep the tooltip honest while the menu is closed."""
+    for _ in range(3600):
+        time.sleep(1.0)
+        try:
+            if not icon.visible:
+                continue
+            title = _title(is_active, is_recording)
+            if icon.title != title:
+                icon.title = title
+        except Exception:
+            return
 
 
 def _image() -> Image.Image:
@@ -28,20 +53,29 @@ def create_icon(
     on_data_dir=None,
     on_survey=None,
     on_wizard=None,
+    describe=None,
 ) -> pystray.Icon:
-    items = [
-        pystray.MenuItem(
-            lambda item: "暂停鼠标" if is_active() else "激活鼠标",
-            lambda: on_toggle(),
-        ),
-        pystray.MenuItem("预览诊断…", lambda: on_preview()),
-        pystray.MenuItem(
-            lambda item: (
-                "停止录制" if is_recording() else "开始录制"
+    items = []
+    if describe is not None:
+        items.append(
+            pystray.MenuItem(lambda item: describe(), None, enabled=False)
+        )
+        items.append(pystray.Menu.SEPARATOR)
+    items.extend(
+        [
+            pystray.MenuItem(
+                lambda item: "暂停鼠标" if is_active() else "激活鼠标",
+                lambda: on_toggle(),
             ),
-            lambda: on_record(),
-        ),
-    ]
+            pystray.MenuItem("预览诊断…", lambda: on_preview()),
+            pystray.MenuItem(
+                lambda item: (
+                    "停止录制" if is_recording() else "开始录制"
+                ),
+                lambda: on_record(),
+            ),
+        ]
+    )
     if on_survey is not None:
         items.append(pystray.MenuItem("勘测模式…", lambda: on_survey()))
     if on_wizard is not None:
@@ -57,9 +91,16 @@ def create_icon(
             pystray.MenuItem("打开数据目录", lambda: on_data_dir())
         )
     items.append(pystray.MenuItem("退出", lambda: on_exit()))
-    return pystray.Icon(
-        "OpticalInputSvc",
+    icon = pystray.Icon(
+        NAME,
         _image(),
-        "OpticalInputSvc · 运行中",
+        _title(is_active, is_recording),
         menu=pystray.Menu(*items),
     )
+    threading.Thread(
+        target=_sync_title,
+        args=(icon, is_active, is_recording),
+        daemon=True,
+        name="airpoint-tray-title",
+    ).start()
+    return icon

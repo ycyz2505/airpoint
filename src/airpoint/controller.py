@@ -123,6 +123,18 @@ class Controller:
     def tier(self) -> str:
         return self._tier.current
 
+    def describe(self) -> str:
+        """One read-only line for the tray menu."""
+        mode = str(self.config.get("pointer.mode", "auto"))
+        name = {"absolute": "绝对", "relative": "相对"}.get(mode, "自动")
+        palm = int(self._last_palm_px or 0)
+        state = "运行中" if self._active.is_set() else "已暂停"
+        if self._recording.is_set():
+            state = "录制中"
+        return (
+            f"{self._tier.current} 档 · {name} · {state} · 手掌 {palm}px"
+        )
+
     def take_bar_request(self) -> bool:
         """True once per two-hand request to toggle the control bar."""
         with self._lock:
@@ -311,6 +323,10 @@ class Controller:
         while not self._stop.is_set():
             if not self._recording.is_set() and self.recorder.active:
                 self._record_path = self.recorder.stop()
+            if self.config.reload_if_changed():
+                self.log("config reloaded from disk")
+                camera.close()
+                self._reset.set()
             if not self._active.is_set() and not self._recording.is_set():
                 if camera.opened:
                     camera.close()

@@ -148,7 +148,15 @@ class Config:
     def __init__(self, path: Path | None = None):
         self.path = path or (data_dir() / "config.json")
         self.data = copy.deepcopy(DEFAULTS)
+        self._stamp = self._stat()
         self.load()
+
+    def _stat(self):
+        try:
+            info = self.path.stat()
+        except OSError:
+            return None
+        return info.st_mtime_ns, info.st_size
 
     def load(self) -> None:
         try:
@@ -157,6 +165,26 @@ class Config:
             return
         if isinstance(raw, dict):
             self._merge(self.data, raw)
+
+    def reload_if_changed(self) -> bool:
+        """Pick up edits made outside the app; keep the old data on error."""
+        stamp = self._stat()
+        if stamp is None or stamp == self._stamp:
+            return False
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # A half-written file; leave the stamp alone and retry later.
+            return False
+        if not isinstance(raw, dict):
+            return False
+        self._stamp = stamp
+        # Build the new tree off to the side and swap it in, so the
+        # controller thread never sees a half-merged dict.
+        merged = copy.deepcopy(self.data)
+        self._merge(merged, raw)
+        self.data = merged
+        return True
 
     def _merge(self, base: dict, incoming: dict) -> None:
         for key, value in incoming.items():
@@ -170,6 +198,7 @@ class Config:
             json.dumps(self.data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+        self._stamp = self._stat()
 
     def get(self, dotted: str, default=None):
         node = self.data

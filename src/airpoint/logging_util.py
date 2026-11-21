@@ -7,6 +7,7 @@ from .paths import log_dir
 
 def make_logger(name: str, config=None):
     path = log_dir() / f"{name}.log"
+    backup = log_dir() / f"{name}.1.log"
     limit = 512 * 1024
     if config is not None:
         try:
@@ -19,7 +20,13 @@ def make_logger(name: str, config=None):
         line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {message}\n"
         try:
             if path.exists() and path.stat().st_size > limit:
-                path.unlink()
+                # Roll instead of deleting, so the last run survives.
+                try:
+                    if backup.exists():
+                        backup.unlink()
+                    path.rename(backup)
+                except OSError:
+                    path.unlink(missing_ok=True)
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(line)
         except OSError:
