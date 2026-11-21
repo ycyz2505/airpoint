@@ -56,13 +56,14 @@ automatic updates.
 - Absolute "virtual touch" mode: draw a box in the preview; the palm maps to
   the screen inside the box. The same box acts as an active zone in relative
   mode; outside it, the cursor freezes.
-- Five-point calibration for absolute mode: full-screen targets, hold still at
-  each one, and a homography replaces the box affine mapping.
+- Nine-point calibration for absolute mode: a 3x3 grid of full-screen targets,
+  hold still at each one, and a homography replaces the box affine mapping. The
+  extra points cover the corners and keep the fit stable in least squares.
 - Automatic A–E tiering from shoulder width plus palm size and hand drop rate,
   with downgrade/upgrade hysteresis. Near picks absolute + single hand; far
   picks relative + two hands and drops hand gestures when the hand is too
   small. Manual lock and advisory-only mode are available.
-- Seat profiles: save and load the box, five-point calibration, feel settings,
+- Seat profiles: save and load the box, nine-point calibration, feel settings,
   tier lock, gestures, and camera settings. The last profile loads at startup.
 - Physical mouse takeover: moving the real mouse pauses the air cursor and it
   resumes after 3 seconds of mouse inactivity; a hotkey or tray toggle cancels

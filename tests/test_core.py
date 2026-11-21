@@ -402,6 +402,65 @@ class WizardTests(unittest.TestCase):
             self.assertEqual(engine.hold_progress(12.1), 0.0)
 
 
+class CalibrationTests(unittest.TestCase):
+    def _samples(self, outlier=False):
+        import cv2
+        import numpy as np
+
+        from airpoint.calibrate import TARGETS
+
+        screen = np.array([[1920.0, 1080.0]])
+        dst = np.array(
+            [[x * 1920.0, y * 1080.0] for x, y in TARGETS], dtype=np.float64
+        )
+        matrix = np.array(
+            [[1.3, 0.1, 20.0], [0.05, 1.2, 10.0], [1e-4, 2e-4, 1.0]]
+        )
+        src = cv2.perspectiveTransform(
+            dst.reshape(-1, 1, 2), np.linalg.inv(matrix)
+        ).reshape(-1, 2)
+        if outlier:
+            src = src.copy()
+            src[4] += (0.06, -0.04) * screen
+        return src, dst
+
+    def test_nine_targets_form_a_grid(self):
+        from airpoint.calibrate import TARGETS
+
+        self.assertEqual(len(TARGETS), 9)
+        self.assertEqual(len({point[0] for point in TARGETS}), 3)
+        self.assertEqual(len({point[1] for point in TARGETS}), 3)
+
+    def test_clean_samples_fit_exactly(self):
+        import cv2
+        import numpy as np
+
+        from airpoint.calibrate import _fit_homography
+
+        src, dst = self._samples()
+        matrix = _fit_homography(src, dst)
+        self.assertIsNotNone(matrix)
+        projected = cv2.perspectiveTransform(
+            src.reshape(-1, 1, 2), matrix
+        ).reshape(-1, 2)
+        self.assertLess(float(np.abs(projected - dst).max()), 1.0)
+
+    def test_one_wild_sample_is_dropped(self):
+        import cv2
+        import numpy as np
+
+        from airpoint.calibrate import _fit_homography
+
+        src, dst = self._samples(outlier=True)
+        matrix = _fit_homography(src, dst)
+        self.assertIsNotNone(matrix)
+        good = np.arange(len(src)) != 4
+        projected = cv2.perspectiveTransform(
+            src[good].reshape(-1, 1, 2), matrix
+        ).reshape(-1, 2)
+        self.assertLess(float(np.abs(projected - dst[good]).max()), 2.0)
+
+
 class SelfCalibrationTests(unittest.TestCase):
     def test_offset_moves_toward_the_error(self):
         from airpoint.selfcal import SelfCalibrator

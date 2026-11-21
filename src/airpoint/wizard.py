@@ -119,7 +119,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
             1: "走到你平时上课的位置，站好，挥手 10 秒，让系统量一量手有多大。",
             2: "你平时是站着还是坐着上课？这会影响默认档位。",
             3: "系统会按你的人框生成活动区，也可以到预览窗口里手动画框。",
-            4: "按 5 点标定，把手放到每个十字下方停稳，直到自动采到。",
+            4: "按 9 点标定，把手放到每个十字下方停稳，直到自动采到。",
             5: "做几次捏合和握拳，看看系统能不能认出来。",
             6: "给这套设置起个名字存下来，下次启动会自动载入。",
         }[step])
@@ -288,7 +288,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
         side, text="开始测量（10 秒）", command=measure
     )
     box_button = ttk.Button(side, text="生成活动区", command=make_box)
-    calib_button = ttk.Button(side, text="开始 5 点标定", command=calibrate)
+    calib_button = ttk.Button(side, text="开始 9 点标定", command=calibrate)
     save_button = ttk.Button(side, text="保存档案", command=save_profile)
 
     def poll() -> None:

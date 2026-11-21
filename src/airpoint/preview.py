@@ -127,7 +127,7 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     ttk.Button(bar, text="清除框", command=lambda: clear_box()).pack(
         side="left", padx=(0, 6)
     )
-    ttk.Button(bar, text="5 点标定", command=lambda: calibrate()).pack(
+    ttk.Button(bar, text="9 点标定", command=lambda: calibrate()).pack(
         side="left", padx=(0, 6)
     )
     ttk.Button(

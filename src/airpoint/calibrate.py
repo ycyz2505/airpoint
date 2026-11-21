@@ -8,14 +8,39 @@ import cv2
 import numpy as np
 
 TARGETS = (
-    (0.15, 0.15),
-    (0.85, 0.15),
-    (0.15, 0.85),
-    (0.85, 0.85),
+    (0.10, 0.10),
+    (0.50, 0.10),
+    (0.90, 0.10),
+    (0.10, 0.50),
     (0.50, 0.50),
+    (0.90, 0.50),
+    (0.10, 0.90),
+    (0.50, 0.90),
+    (0.90, 0.90),
 )
 HOLD_SECONDS = 1.5
 MOVE_LIMIT = 0.004
+
+
+def _fit_homography(src, dst):
+    """Fit a homography, dropping one wild sample so a slip does not skew it."""
+    matrix, _ = cv2.findHomography(src, dst, 0)
+    if matrix is None or len(src) < 6:
+        return matrix
+    projected = cv2.perspectiveTransform(
+        src.reshape(-1, 1, 2), matrix
+    ).reshape(-1, 2)
+    errors = np.linalg.norm(projected - dst, axis=1)
+    worst = int(np.argmax(errors))
+    span = max(
+        float(np.ptp(dst[:, 0])) or 1.0, float(np.ptp(dst[:, 1])) or 1.0
+    )
+    typical = float(np.median(errors))
+    if errors[worst] < max(typical * 3.0, span * 0.03):
+        return matrix
+    keep = [i for i in range(len(src)) if i != worst]
+    trimmed, _ = cv2.findHomography(src[keep], dst[keep], 0)
+    return trimmed if trimmed is not None else matrix
 
 
 def run_calibration(parent, bus, controller, config, screen_w, screen_h) -> None:
@@ -65,7 +90,7 @@ def run_calibration(parent, bus, controller, config, screen_w, screen_h) -> None
         win.destroy()
         if save:
             messagebox.showinfo(
-                "OpticalInputSvc", "5 点标定已保存。", parent=parent
+                "OpticalInputSvc", "标定已保存。", parent=parent
             )
 
     def fit() -> bool:
@@ -80,7 +105,7 @@ def run_calibration(parent, bus, controller, config, screen_w, screen_h) -> None
             [[sample[2], sample[3]] for sample in samples],
             dtype=np.float64,
         )
-        matrix, _ = cv2.findHomography(src, dst, 0)
+        matrix = _fit_homography(src, dst)
         if matrix is None:
             affine, _ = cv2.estimateAffine2D(src, dst)
             if affine is None:
@@ -159,7 +184,7 @@ def run_calibration(parent, bus, controller, config, screen_w, screen_h) -> None
             60,
             text=(
                 "把手放到你自然指向目标的位置，保持不动"
-                f"  ({index + 1}/5)"
+                f"  ({index + 1}/{len(TARGETS)})"
             ),
             fill="#f0f0f0",
             font=("Segoe UI", 26),

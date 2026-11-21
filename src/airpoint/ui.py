@@ -533,7 +533,7 @@ def _build_profiles(notebook, config, on_saved, reopen) -> None:
     ttk.Label(
         frame,
         text=(
-            "档案保存框、5 点标定、指针手感、档位、手势和摄像头设置。"
+            "档案保存框、9 点标定、指针手感、档位、手势和摄像头设置。"
             "保存前请先点“保存”写入当前设置。"
         ),
         wraplength=620,
