@@ -19,6 +19,26 @@ Design phase. No runnable build yet.
 - Left click, right click, drag, double click, and wheel
 - Sit/stand profiles and offline replay for tuning
 
+## Auto-update
+
+On startup (about 3 seconds later) and every 6 hours, the app reads the
+`manifest.json` from the `build-latest` release, compares versions, and
+downloads the new executable through a list of GitHub mirrors:
+
+1. `https://ghfast.top/`
+2. `https://gh-proxy.com/`
+3. `https://ghproxy.net/`
+4. direct GitHub
+
+The download is checked against the SHA-256 in the manifest and an Ed25519
+signature before it replaces the running executable. Replacement happens only
+when the app is idle; a failed start rolls back to the previous build. Set
+`OPTICALINPUT_NO_UPDATE=1` to disable automatic updates.
+
+## Build output
+
+`OpticalInputSvc.exe` — PyInstaller onefile, no console window.
+
 ## Target environment
 
 - Windows 10
