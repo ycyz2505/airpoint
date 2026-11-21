@@ -190,7 +190,15 @@ if not errorlevel 1 (
   goto wait
 )
 if exist "{target}.bak" del /f /q "{target}.bak" >nul 2>nul
+set n=0
+:mv
+set /a n+=1
+if %n% gtr 60 exit /b 1
 move /y "{target}" "{target}.bak" >nul 2>nul
+if errorlevel 1 (
+  ping -n 2 127.0.0.1 >nul
+  goto mv
+)
 move /y "{new}" "{target}" >nul 2>nul
 if errorlevel 1 (
   move /y "{target}.bak" "{target}" >nul 2>nul
@@ -217,9 +225,6 @@ def check_and_update(log, on_ready=None, delay: float = 3.0) -> None:
         return
     if os.environ.get("OPTICALINPUT_NO_UPDATE"):
         log("update disabled by OPTICALINPUT_NO_UPDATE")
-        return
-    if (Path(__file__).resolve().parents[2] / ".dev").exists():
-        log("dev marker; update disabled")
         return
     if delay:
         time.sleep(delay)
