@@ -231,6 +231,41 @@ def staged_path() -> Path:
     return target.with_name(target.stem + "-new.exe")
 
 
+def cleanup_leftovers(log=None) -> None:
+    """Drop an unverified download left behind by an interrupted update.
+
+    §12.5 step 6: a power cut mid-download leaves a ``.part`` that was never
+    checked against the manifest, so it can never be trusted. The ``.bak`` is
+    deliberately kept — it is the previous build, which is what rollback
+    needs — and so is any ``update-*.bat``, since a batch file that is still
+    running is read line by line from disk.
+    """
+    target = exe_path()
+    if target.suffix.lower() != ".exe":
+        # In a source checkout exe_path() is a .py file; the only thing this
+        # would ever delete is the code itself.
+        return
+    part = target.with_name(target.stem + ".part")
+    try:
+        if part.exists():
+            part.unlink()
+            if log is not None:
+                log(f"removed leftover {part.name}")
+    except OSError:
+        pass
+    # The batch deletes the backup once it sees the started marker; if it was
+    # killed first, the marker still proves this build runs, so the old copy
+    # has done its job.
+    backup = target.with_name(target.name + ".bak")
+    if backup.exists() and (updates_dir() / f"started-{__version__}.ok").exists():
+        try:
+            backup.unlink()
+            if log is not None:
+                log(f"removed old build {backup.name}")
+        except OSError:
+            pass
+
+
 def apply_staged(log) -> bool:
     """Apply a build that was downloaded but not installed last time."""
     if not getattr(sys, "frozen", False):

@@ -123,6 +123,7 @@ def main() -> None:
     security = Security(config)
     log = make_logger("app", config)
     log(f"start {__version__}")
+    updater.cleanup_leftovers(log)
 
     if str(config.get("update.apply_when", "startup")) != "manual":
         updater.apply_staged(log)

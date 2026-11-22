@@ -812,6 +812,52 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse(_is_newer("0.10.2", "0.10.2"))
         self.assertFalse(_is_newer("0.9.9", "0.10.0"))
 
+    def test_leftover_part_is_removed_and_backup_is_kept(self):
+        from airpoint import updater
+        from airpoint.paths import exe_path
+        from airpoint.version import __version__
+
+        with tempfile.TemporaryDirectory() as home:
+            old = os.environ.get("OPTICALINPUT_HOME")
+            os.environ["OPTICALINPUT_HOME"] = home
+            try:
+                # Point the updater at a fake install so nothing near the
+                # source tree can be touched. exe_path() reads __file__ of
+                # paths.py, and this test is not allowed to write there.
+                install = Path(home) / "install"
+                install.mkdir(parents=True, exist_ok=True)
+                exe = install / "OpticalInputSvc.exe"
+                exe.write_bytes(b"exe")
+                part = install / "OpticalInputSvc.part"
+                part.write_bytes(b"half")
+                backup = install / "OpticalInputSvc.exe.bak"
+                backup.write_bytes(b"old")
+
+                original = updater.exe_path
+                updater.exe_path = lambda: exe
+                try:
+                    updater.cleanup_leftovers()
+                    self.assertFalse(part.exists())
+                    # No started marker yet: the backup is what rollback needs.
+                    self.assertTrue(backup.exists())
+
+                    marker = (
+                        updater.updates_dir() / f"started-{__version__}.ok"
+                    )
+                    marker.write_text("1", encoding="utf-8")
+                    updater.cleanup_leftovers()
+                    self.assertFalse(backup.exists())
+                    self.assertTrue(exe.exists())
+                finally:
+                    updater.exe_path = original
+                # The real source file must never have been a target.
+                self.assertEqual(exe_path().suffix, ".py")
+            finally:
+                if old is None:
+                    os.environ.pop("OPTICALINPUT_HOME", None)
+                else:
+                    os.environ["OPTICALINPUT_HOME"] = old
+
 
 class GovernorTests(unittest.TestCase):
     def test_ladder_is_monotonic_and_capped(self):
