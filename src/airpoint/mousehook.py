@@ -84,6 +84,7 @@ class MousePause:
                 return
             if not self._paused:
                 self._paused = True
+                self.controller.set_mouse_takeover(True)
                 self.controller.set_active(False)
                 self.log("mouse pause")
             if self._timer is not None:
@@ -98,6 +99,7 @@ class MousePause:
                 return
             self._paused = False
             self._timer = None
+        self.controller.set_mouse_takeover(False)
         self.controller.set_active(True)
         self.log("mouse resume")
 
@@ -107,6 +109,7 @@ class MousePause:
                 self._timer.cancel()
                 self._timer = None
             self._paused = False
+        self.controller.set_mouse_takeover(False)
 
 
 class MouseHook:

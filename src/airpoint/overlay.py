@@ -233,8 +233,15 @@ class ControlBar:
             return
         active = self.controller.active
         recording = self.controller.recording
-        text = "● 录制" if recording else ("● 激活" if active else "● 暂停")
-        color = "#ff4040" if recording else ("#22c55e" if active else "#ffb400")
+        takeover = bool(getattr(self.controller, "mouse_takeover", False))
+        if recording:
+            text, color = "● 录制", "#ff4040"
+        elif active:
+            text, color = "● 激活", "#22c55e"
+        elif takeover:
+            text, color = "● 物理鼠标", "#ffb400"
+        else:
+            text, color = "● 暂停", "#ffb400"
         try:
             self._status.configure(text=text, fg=color)
             self._toggle.configure(text="暂停" if active else "激活")
@@ -426,6 +433,10 @@ class ScreenHud:
             text = ""
             if recording:
                 text = "● 录制"
+            elif not active and bool(
+                getattr(self.controller, "mouse_takeover", False)
+            ):
+                text = "● 物理鼠标"
             elif not active:
                 text = "● 暂停"
             elif bool(getattr(self.controller, "inject_blocked", False)):
@@ -490,9 +501,14 @@ def draw_status(frame, stats: dict) -> None:
     cv2.rectangle(overlay, (0, 0), (width, bar_height), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
 
-    state = "REC" if stats.get("recording") else (
-        "ACTIVE" if stats.get("active") else "PAUSED"
-    )
+    if stats.get("recording"):
+        state = "REC"
+    elif stats.get("active"):
+        state = "ACTIVE"
+    elif stats.get("takeover"):
+        state = "MOUSE"
+    else:
+        state = "PAUSED"
     color = (80, 80, 255) if stats.get("recording") else (
         (80, 220, 80) if stats.get("active") else (80, 190, 255)
     )

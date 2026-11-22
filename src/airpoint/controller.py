@@ -72,6 +72,7 @@ class Controller:
         self._bar_request = 0
         self._inject_blocked = False
         self._blocked_log = 0.0
+        self._mouse_takeover = False
         self._diag = Diagnostics(1800)
         self._crash_backoff = 0.5
         self.personalizer = Personalizer()
@@ -147,6 +148,14 @@ class Controller:
         return self._inject_blocked
 
     @property
+    def mouse_takeover(self) -> bool:
+        """True while a real mouse has paused the air cursor (§9.6)."""
+        return self._mouse_takeover
+
+    def set_mouse_takeover(self, value: bool) -> None:
+        self._mouse_takeover = bool(value)
+
+    @property
     def tier(self) -> str:
         return self._tier.current
 
@@ -158,6 +167,8 @@ class Controller:
         state = "运行中" if self._active.is_set() else "已暂停"
         if self._recording.is_set():
             state = "录制中"
+        elif self._mouse_takeover:
+            state = "物理鼠标"
         return (
             f"{self._tier.current} 档 · {name} · {state} · 手掌 {palm}px"
         )
@@ -172,6 +183,7 @@ class Controller:
 
     def set_active(self, active: bool) -> None:
         if active:
+            self._mouse_takeover = False
             self._reset.set()
             self._active.set()
             self.log("controller active")
@@ -889,6 +901,7 @@ class Controller:
                         "proc_ms": self._proc_ms,
                         "palm_px": self._last_palm_px,
                         "drop": drop,
+                        "takeover": self._mouse_takeover,
                         "presentation": bool(
                             self.config.get("overlay.presentation", False)
                         ),

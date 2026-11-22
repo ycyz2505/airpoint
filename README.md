@@ -89,8 +89,9 @@ build is left untouched and the app starts from defaults.
   if the seat, camera or resolution no longer match, the app asks whether to
   redraw the box.
 - Physical mouse takeover: moving the real mouse pauses the air cursor and it
-  resumes after 3 seconds of mouse inactivity; a hotkey or tray toggle cancels
-  the automatic resume.
+  resumes after 3 seconds of mouse inactivity; the HUD, control bar, tray line
+  and preview status strip all say `物理鼠标` / `MOUSE` while that is why the
+  cursor is idle. A hotkey or tray toggle cancels the automatic resume.
 - Manual recording from the tray: the controller stops cursor work and writes
   the raw camera stream to `recordings/rec-*.avi` (MJPG) after checking free
   disk space.

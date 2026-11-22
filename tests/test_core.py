@@ -1570,6 +1570,26 @@ class StatusLineTests(unittest.TestCase):
         draw_status(blocked, {"active": True, "blocked": True})
         self.assertNotEqual(plain.tobytes(), blocked.tobytes())
 
+    def test_mouse_takeover_is_its_own_state(self):
+        import numpy as np
+
+        from airpoint.overlay import draw_status
+
+        paused = np.zeros((120, 640, 3), dtype=np.uint8)
+        takeover = np.zeros((120, 640, 3), dtype=np.uint8)
+        draw_status(paused, {"active": False})
+        draw_status(takeover, {"active": False, "takeover": True})
+        self.assertNotEqual(paused.tobytes(), takeover.tobytes())
+
+    def test_takeover_flag_clears_when_the_air_cursor_resumes(self):
+        from airpoint.controller import Controller
+
+        controller = Controller.__new__(Controller)
+        controller._mouse_takeover = True
+        self.assertTrue(controller.mouse_takeover)
+        controller.set_mouse_takeover(False)
+        self.assertFalse(controller.mouse_takeover)
+
 
 if __name__ == "__main__":
     unittest.main()
