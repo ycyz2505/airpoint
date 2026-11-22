@@ -53,6 +53,23 @@ class ReplayAnalyzer:
             mode = "relative"
         return moving_hand, scheme, click_name, mode, box
 
+    def _screen(self):
+        """The display the replay maps onto (§7.1).
+
+        A clip recorded on the classroom panel is judged against that panel's
+        geometry, so the pointer maths match what the live loop would have
+        done. A machine with no display (CI) falls back to 1080p.
+        """
+        try:
+            from . import inject
+
+            _left, _top, width, height = inject.screen_rect(
+                self.config.get("pointer.screen", "auto")
+            )
+        except Exception:
+            return 1920, 1080
+        return int(width) or 1920, int(height) or 1080
+
     def _annotate(self, frame, result, tier_name, out) -> None:
         """Draw what the pipeline saw so a tuning pass can be eyeballed.
 
@@ -89,7 +106,7 @@ class ReplayAnalyzer:
             source_fps = 30.0
 
         moving_hand, scheme, click_name, mode, box = self._resolved()
-        screen_w, screen_h = 1920, 1080
+        screen_w, screen_h = self._screen()
 
         pointer = RelativePointer(self.config)
         absolute = AbsolutePointer(self.config)
