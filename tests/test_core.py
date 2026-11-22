@@ -1942,6 +1942,65 @@ class HandCropBoundsTests(unittest.TestCase):
         self.assertGreater(y1, y0)
 
 
+class BoxEditTests(unittest.TestCase):
+    """§8.5: the mapping box can be dragged by a corner or slid whole."""
+
+    def test_dragging_a_corner_moves_only_that_corner(self):
+        from airpoint.preview import resize_box
+
+        box = resize_box([0.2, 0.2, 0.8, 0.8], "nw", 0.1, 0.3)
+        self.assertEqual(box[2:], [0.8, 0.8])
+        self.assertAlmostEqual(box[0], 0.1)
+        self.assertAlmostEqual(box[1], 0.3)
+
+    def test_the_opposite_corner_stays_put(self):
+        from airpoint.preview import resize_box
+
+        for handle, kept in (
+            ("nw", (0.8, 0.8)),
+            ("ne", (0.2, 0.8)),
+            ("sw", (0.8, 0.2)),
+            ("se", (0.2, 0.2)),
+        ):
+            box = resize_box([0.2, 0.2, 0.8, 0.8], handle, 0.5, 0.5)
+            self.assertAlmostEqual(box[0] if handle in ("ne", "se") else box[2],
+                                   kept[0])
+            self.assertAlmostEqual(box[1] if handle in ("sw", "se") else box[3],
+                                   kept[1])
+
+    def test_a_corner_cannot_collapse_the_box(self):
+        from airpoint.preview import BOX_MIN, resize_box
+
+        box = resize_box([0.2, 0.2, 0.8, 0.8], "nw", 0.99, 0.99)
+        self.assertGreaterEqual(box[2] - box[0], BOX_MIN - 1e-9)
+        self.assertGreaterEqual(box[3] - box[1], BOX_MIN - 1e-9)
+
+    def test_a_corner_is_clamped_to_the_frame(self):
+        from airpoint.preview import resize_box
+
+        box = resize_box([0.2, 0.2, 0.8, 0.8], "nw", -0.5, -0.5)
+        self.assertGreaterEqual(box[0], 0.0)
+        self.assertGreaterEqual(box[1], 0.0)
+
+    def test_sliding_keeps_the_size(self):
+        from airpoint.preview import move_box
+
+        box = move_box([0.3, 0.3, 0.6, 0.6], 0.1, -0.1)
+        self.assertAlmostEqual(box[0], 0.4)
+        self.assertAlmostEqual(box[1], 0.2)
+        self.assertAlmostEqual(box[2] - box[0], 0.3)
+        self.assertAlmostEqual(box[3] - box[1], 0.3)
+
+    def test_sliding_stops_at_the_frame_edge(self):
+        from airpoint.preview import move_box
+
+        box = move_box([0.6, 0.6, 0.9, 0.9], 0.5, 0.5)
+        self.assertAlmostEqual(box[2], 1.0)
+        self.assertAlmostEqual(box[3], 1.0)
+        self.assertAlmostEqual(box[2] - box[0], 0.3)
+        self.assertAlmostEqual(box[3] - box[1], 0.3)
+
+
 class StatusLineTests(unittest.TestCase):
     def test_capability_strip_is_drawn(self):
         import numpy as np

@@ -52,6 +52,40 @@ def _target_aspect(config) -> float:
     return width / max(1, height)
 
 
+BOX_MIN = 0.04
+
+
+def resize_box(box, handle: str, x: float, y: float):
+    """§8.5: drag one corner of the mapping box to ``(x, y)``.
+
+    ``handle`` is ``nw``/``ne``/``sw``/``se``. The dragged corner moves, the
+    opposite one stays put, and the box is kept at least ``BOX_MIN`` wide and
+    tall so it can never collapse to a line and leave nothing to map.
+    """
+    x = max(0.0, min(1.0, float(x)))
+    y = max(0.0, min(1.0, float(y)))
+    bx0, by0, bx1, by1 = [float(item) for item in box]
+    if handle == "nw":
+        return [min(x, bx1 - BOX_MIN), min(y, by1 - BOX_MIN), bx1, by1]
+    if handle == "ne":
+        return [bx0, min(y, by1 - BOX_MIN), max(x, bx0 + BOX_MIN), by1]
+    if handle == "sw":
+        return [min(x, bx1 - BOX_MIN), by0, bx1, max(y, by0 + BOX_MIN)]
+    if handle == "se":
+        return [bx0, by0, max(x, bx0 + BOX_MIN), max(y, by0 + BOX_MIN)]
+    return list(box)
+
+
+def move_box(box, dx: float, dy: float):
+    """§8.5: slide the whole box, stopping at the frame edge."""
+    bx0, by0, bx1, by1 = [float(item) for item in box]
+    width = bx1 - bx0
+    height = by1 - by0
+    dx = max(-bx0, min(1.0 - bx1, float(dx)))
+    dy = max(-by0, min(1.0 - by1, float(dy)))
+    return [bx0 + dx, by0 + dy, bx0 + dx + width, by0 + dy + height]
+
+
 def open_preview(root, bus: PreviewBus, controller, config) -> None:
     existing = getattr(root, "_preview_window", None)
     if existing is not None:
@@ -65,11 +99,23 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     win = tk.Toplevel(root)
     root._preview_window = win
     win.title("OpticalInputSvc 预览诊断")
-    win.geometry("780x900")
-    win.minsize(700, 760)
+    win.geometry("780x1010")
+    win.minsize(700, 860)
 
     canvas = tk.Canvas(win, width=640, height=360, highlightthickness=0)
     canvas.pack(padx=8, pady=(8, 0))
+
+    map_frame = ttk.LabelFrame(win, text="框对应屏幕", padding=6)
+    map_frame.pack(fill="x", padx=10, pady=(6, 0))
+    map_canvas = tk.Canvas(
+        map_frame, width=320, height=180, highlightthickness=1,
+        bd=0, bg="#101010",
+    )
+    map_canvas.pack(side="left")
+    map_text = tk.StringVar(value="还没有活动区。")
+    ttk.Label(
+        map_frame, textvariable=map_text, justify="left", wraplength=380
+    ).pack(side="left", padx=(10, 0), anchor="n")
 
     stats_var = tk.StringVar(value="未激活 / 无画面")
     ttk.Label(win, textvariable=stats_var, justify="left").pack(
@@ -128,6 +174,8 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     toggle_button.pack(side="left")
     box_button = ttk.Button(bar, text="画框")
     box_button.pack(side="left", padx=6)
+    edit_button = ttk.Button(bar, text="调整框")
+    edit_button.pack(side="left", padx=(0, 6))
     ttk.Button(bar, text="建议框", command=lambda: suggest()).pack(
         side="left", padx=(0, 6)
     )
@@ -184,6 +232,94 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
     img_h = 0
     box_mode = False
     drag_start = None
+    edit_mode = False
+    edit_handle = None
+    edit_origin = None
+    map_sig = None
+
+    def current_box():
+        box = config.get("pointer.box", [])
+        if isinstance(box, list) and len(box) == 4:
+            try:
+                return [float(item) for item in box]
+            except (TypeError, ValueError):
+                return []
+        return []
+
+    def draw_map() -> None:
+        """§8.5: show which part of the screen the box covers."""
+        from . import inject
+
+        nonlocal map_sig
+        map_sig = tuple(current_box())
+        map_canvas.delete("all")
+        box = current_box()
+        if not box:
+            map_text.set("还没有活动区。按「建议框」或「画框」生成一个。")
+            return
+        _left, _top, screen_w, screen_h = inject.screen_rect(
+            config.get("pointer.screen", "auto")
+        )
+        aspect = screen_w / max(1, screen_h)
+        width = 320
+        height = max(1, int(round(width / aspect)))
+        if height > 180:
+            height = 180
+            width = max(1, int(round(height * aspect)))
+        map_canvas.configure(width=width, height=height)
+        map_canvas.create_rectangle(
+            0, 0, width, height, outline="#3a3a3a", fill="#151515"
+        )
+        x0, y0, x1, y1 = box
+        map_canvas.create_rectangle(
+            x0 * width, y0 * height, x1 * width, y1 * height,
+            outline="#ffd400", width=2, fill="#2a2410",
+        )
+        map_text.set(
+            f"活动区占屏幕 {abs(x1 - x0) * 100:.0f}% × "
+            f"{abs(y1 - y0) * 100:.0f}%。\n"
+            f"目标屏 {screen_w}×{screen_h}。\n"
+            "活动区越小，绝对模式的手感越灵敏；\n"
+            "画得太大，够到边角就要走很远。"
+        )
+
+    def hit_handle(x, y):
+        """Which part of the box the pointer grabbed: a corner or the middle."""
+        box = current_box()
+        if not box or img_w <= 0 or img_h <= 0:
+            return None
+        bx0, by0, bx1, by1 = box
+        corners = {
+            "nw": (bx0, by0),
+            "ne": (bx1, by0),
+            "sw": (bx0, by1),
+            "se": (bx1, by1),
+        }
+        reach_x = 14.0 / img_w
+        reach_y = 14.0 / img_h
+        for name, (cx, cy) in corners.items():
+            if abs(x - cx) <= reach_x and abs(y - cy) <= reach_y:
+                return name
+        if bx0 <= x <= bx1 and by0 <= y <= by1:
+            return "move"
+        return None
+
+    def apply_edit(x, y) -> None:
+        nonlocal edit_origin
+        box = current_box()
+        if not box or edit_origin is None:
+            return
+        x = max(0.0, min(1.0, x))
+        y = max(0.0, min(1.0, y))
+        if edit_handle == "move":
+            box = move_box(box, x - edit_origin[0], y - edit_origin[1])
+        else:
+            box = resize_box(box, edit_handle, x, y)
+        config.set("pointer.box", [round(item, 4) for item in box])
+        edit_origin = (x, y)
+        canvas.delete("box")
+        draw_box()
+        draw_map()
 
     def toggle() -> None:
         controller.set_active(not controller.active)
@@ -274,19 +410,50 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
                 width=2,
                 tags="box",
             )
+            if edit_mode:
+                from .controller import _tracking_zone
+
+                zx0, zy0, zx1, zy1 = _tracking_zone(box)
+                canvas.create_rectangle(
+                    zx0 * img_w, zy0 * img_h, zx1 * img_w, zy1 * img_h,
+                    outline="#5a5a5a", width=1, dash=(3, 3), tags="box",
+                )
+                for cx, cy in (
+                    (x0, y0), (x1, y0), (x0, y1), (x1, y1)
+                ):
+                    canvas.create_rectangle(
+                        cx * img_w - 6, cy * img_h - 6,
+                        cx * img_w + 6, cy * img_h + 6,
+                        outline="#ffd400", fill="#ffd400", tags="box",
+                    )
+
+    def set_modes(edit: bool, draw: bool) -> None:
+        """§8.5: 画框 and 调整框 are mutually exclusive."""
+        nonlocal edit_mode, box_mode, drag_start, edit_handle, edit_origin
+        edit_mode = edit
+        box_mode = draw
+        if not edit:
+            edit_handle = None
+            edit_origin = None
+        if not draw:
+            drag_start = None
+            canvas.delete("temp")
+        canvas.configure(
+            cursor="crosshair" if draw else ("fleur" if edit else "")
+        )
+        box_button.configure(text="取消画框" if draw else "画框")
+        edit_button.configure(text="完成调整" if edit else "调整框")
+        draw_box()
+        draw_map()
 
     def toggle_box() -> None:
-        nonlocal box_mode, drag_start
-        box_mode = not box_mode
-        drag_start = None
-        canvas.delete("temp")
-        canvas.configure(cursor="crosshair" if box_mode else "")
-        box_button.configure(text="取消画框" if box_mode else "画框")
+        set_modes(False, not box_mode)
 
     def clear_box() -> None:
         config.set("pointer.box", [])
         config.save()
         draw_box()
+        draw_map()
 
     def suggest() -> None:
         from .autobox import suggest_box
@@ -318,6 +485,7 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         config.set("pointer.mode", "absolute")
         config.save()
         draw_box()
+        draw_map()
         messagebox.showinfo(
             "OpticalInputSvc",
             "已按人框生成活动区，并切到绝对模式。\n"
@@ -325,14 +493,37 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             parent=win,
         )
 
+    def toggle_edit() -> None:
+        if not edit_mode and not current_box():
+            messagebox.showinfo(
+                "OpticalInputSvc",
+                "还没有活动区。先按「建议框」或「画框」。",
+                parent=win,
+            )
+            return
+        set_modes(not edit_mode, False)
+
     def on_press(event) -> None:
-        nonlocal drag_start
+        nonlocal drag_start, edit_handle, edit_origin
+        if edit_mode:
+            if img_w <= 0 or img_h <= 0:
+                return
+            handle = hit_handle(event.x / img_w, event.y / img_h)
+            if handle is None:
+                return
+            edit_handle = handle
+            edit_origin = (event.x / img_w, event.y / img_h)
+            return
         if not box_mode:
             return
         drag_start = (event.x, event.y)
         canvas.delete("temp")
 
     def on_drag(event) -> None:
+        if edit_mode:
+            if edit_handle is not None and img_w > 0 and img_h > 0:
+                apply_edit(event.x / img_w, event.y / img_h)
+            return
         if not box_mode or drag_start is None:
             return
         canvas.delete("temp")
@@ -346,8 +537,26 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             tags="temp",
         )
 
+    def on_hover(event) -> None:
+        """Cursor feedback so the handles are discoverable (§8.5)."""
+        if not edit_mode or img_w <= 0 or img_h <= 0:
+            return
+        handle = hit_handle(event.x / img_w, event.y / img_h)
+        if handle == "move":
+            canvas.configure(cursor="fleur")
+        elif handle is not None:
+            canvas.configure(cursor="crosshair")
+        else:
+            canvas.configure(cursor="arrow")
+
     def on_release(event) -> None:
-        nonlocal drag_start, box_mode
+        nonlocal drag_start, box_mode, edit_handle, edit_origin
+        if edit_mode:
+            if edit_handle is not None:
+                config.save()
+            edit_handle = None
+            edit_origin = None
+            return
         if not box_mode or drag_start is None:
             return
         x0, y0 = drag_start
@@ -372,11 +581,14 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         canvas.configure(cursor="")
         box_button.configure(text="画框")
         draw_box()
+        draw_map()
 
     box_button.configure(command=toggle_box)
+    edit_button.configure(command=toggle_edit)
     canvas.bind("<ButtonPress-1>", on_press)
     canvas.bind("<B1-Motion>", on_drag)
     canvas.bind("<ButtonRelease-1>", on_release)
+    canvas.bind("<Motion>", on_hover)
 
     def close() -> None:
         survey_win = getattr(root, "_survey_window", None)
@@ -436,11 +648,16 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         )
 
     def poll() -> None:
-        nonlocal photo, last_seq, img_w, img_h
+        nonlocal photo, last_seq, img_w, img_h, map_sig
         frame, stats = bus.latest()
         if stats:
             stats["active"] = controller.active
         seq = int(stats.get("seq", 0))
+
+        sig = tuple(current_box())
+        if sig != map_sig:
+            map_sig = sig
+            draw_map()
 
         if (
             frame is not None
@@ -472,5 +689,6 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
 
     win.protocol("WM_DELETE_WINDOW", close)
     bus.set_enabled(True)
+    draw_map()
     win.after(80, poll)
     win.lift()
