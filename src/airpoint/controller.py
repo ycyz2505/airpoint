@@ -471,6 +471,20 @@ class Controller:
         camera = Camera(self.config, self.log)
         pose = PoseTracker(self.config, self.log)
         hands = HandTracker(self.config, self.log)
+        try:
+            self._loop(camera, pose, hands)
+        finally:
+            # A throw must not leave the exclusive camera or a MediaPipe
+            # graph open: the supervisor restarts the loop at once, and a
+            # stale handle would make the next open fail for seconds.
+            self._release_all()
+            for resource in (camera, pose, hands):
+                try:
+                    resource.close()
+                except Exception:
+                    pass
+
+    def _loop(self, camera, pose, hands) -> None:
         pointer = RelativePointer(self.config)
         absolute = AbsolutePointer(self.config)
         gestures = GestureEngine(self.config, self.log)
@@ -536,6 +550,10 @@ class Controller:
             if frame is None:
                 time.sleep(0.05)
                 continue
+            if self._stop.is_set():
+                # stop() releases the buttons once the join times out, so a
+                # frame already in flight must not press one afterwards.
+                break
 
             if self._recording.is_set():
                 if not self.recorder.active:
@@ -888,6 +906,18 @@ class Controller:
                 cx, cy = inject.get_cursor()
                 if safe_zone(cx, cy, screen_w, screen_h, origin=origin):
                     kind = "none"
+
+            # §9.5 releases a press after 5 s *without a hand*. Refresh the
+            # clock while the hand is tracked, so a long stroke or a slow
+            # drag is not cut off mid-line; the watchdog reads the same
+            # timestamps and gets the same behaviour.
+            if kind != "none":
+                if self._held_since:
+                    self._held_since = now
+                if self._pressed:
+                    with self._lock:
+                        for name in self._pressed:
+                            self._pressed[name] = now
 
             calibration = self.config.get("pointer.calibration", [])
             calibration_size = self.config.get(

@@ -223,15 +223,19 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
         if not controller.active:
             controller.set_active(True)
         win.attributes("-topmost", False)
-        run_calibration(win, bus, controller, config)
-        win.attributes("-topmost", True)
+        try:
+            run_calibration(win, bus, controller, config)
+        finally:
+            # An abort or a throw must not leave the wizard buried behind
+            # the full-screen calibration overlay.
+            win.attributes("-topmost", True)
         result_var.set("标定已保存。")
 
     def save_profile() -> None:
+        config.set("wizard.seat", seat.get())
         name = str(config.get("wizard.profile", "") or "").strip()
         if not name:
             name = suggest_name(config)
-        config.set("wizard.seat", seat.get())
         config.set("wizard.done", True)
         config.set("wizard.profile", name)
         config.save()

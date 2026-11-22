@@ -14,6 +14,8 @@ class Recorder:
         self.log = log
         self.writer = None
         self.path = None
+        self._size = None
+        self._size_warned = False
 
     @property
     def active(self) -> bool:
@@ -44,12 +46,23 @@ class Recorder:
             return False
         self.writer = writer
         self.path = path
+        self._size = (width, height)
+        self._size_warned = False
         self.log(f"record start: {path} {width}x{height} @{fps}")
         return True
 
     def write(self, frame) -> None:
-        if self.writer is not None:
-            self.writer.write(frame)
+        if self.writer is None:
+            return
+        height, width = frame.shape[:2]
+        if self._size is not None and (width, height) != self._size:
+            # Editing config.json mid-recording reopens the camera at the new
+            # size; a mismatched frame would abort the writer, so drop it.
+            if not self._size_warned:
+                self._size_warned = True
+                self.log("record: dropping frames at a different size")
+            return
+        self.writer.write(frame)
 
     def stop(self):
         path = self.path
@@ -58,4 +71,6 @@ class Recorder:
             self.writer = None
             self.log(f"record stop: {path}")
         self.path = None
+        self._size = None
+        self._size_warned = False
         return path

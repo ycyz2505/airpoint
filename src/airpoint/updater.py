@@ -429,14 +429,24 @@ if errorlevel 1 (
 )
 start "" "{target}"
 ping -n 31 127.0.0.1 >nul
-if exist "{marker}" (
-  del /f /q "{target}.bak" >nul 2>nul
-) else (
-  taskkill /IM "{target.name}" /F >nul 2>nul
-  move /y "{target}.bak" "{target}" >nul 2>nul
-  start "" "{target}"
+if exist "{marker}" goto keep
+taskkill /IM "{target.name}" /F >nul 2>nul
+set r=0
+:rb
+set /a r+=1
+if %r% gtr 60 exit /b 1
+move /y "{target}.bak" "{target}" >nul 2>nul
+if errorlevel 1 (
+  ping -n 2 127.0.0.1 >nul
+  goto rb
 )
+start "" "{target}"
 del "%~f0"
+exit /b 0
+:keep
+del /f /q "{target}.bak" >nul 2>nul
+del "%~f0"
+exit /b 0
 """
     # cmd.exe reads a .bat in the console ANSI codepage, not UTF-8, so a
     # non-ASCII install path would be mangled by an utf-8 write.
@@ -461,6 +471,12 @@ def _leave_cleanly() -> None:
 def staged_path() -> Path:
     target = exe_path()
     return target.with_name(target.stem + "-new.exe")
+
+
+def staged_version_path() -> Path:
+    """The version a staged build claims, so it is never installed blind."""
+    new = staged_path()
+    return new.with_name(new.stem + ".version")
 
 
 def state_path() -> Path:
@@ -558,6 +574,21 @@ def apply_staged(log) -> bool:
             return False
     except OSError:
         return False
+    sidecar = staged_version_path()
+    try:
+        staged = sidecar.read_text(encoding="utf-8").strip()
+    except OSError:
+        staged = ""
+    if staged and not _is_newer(staged, __version__):
+        # A newer build was installed by hand while this one was waiting;
+        # applying it now would silently downgrade the app.
+        log(f"staged {staged} is not newer than {__version__}; dropped")
+        for path in (new, sidecar):
+            try:
+                path.unlink()
+            except OSError:
+                pass
+        return False
     marker = updates_dir() / "started-pending.ok"
     try:
         if marker.exists():
@@ -574,6 +605,10 @@ def apply_staged(log) -> bool:
         ["cmd.exe", "/C", str(batch)],
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
+    try:
+        sidecar.unlink()
+    except OSError:
+        pass
     time.sleep(0.5)
     _leave_cleanly()
 
@@ -623,6 +658,10 @@ def check_and_update(
         new = staged_path()
         part.replace(new)
         if not apply_now:
+            try:
+                staged_version_path().write_text(remote, encoding="utf-8")
+            except OSError:
+                pass
             log(f"staged {remote}; will apply on next start")
             write_state(last_result=f"已下载 {remote}，下次启动安装")
             return

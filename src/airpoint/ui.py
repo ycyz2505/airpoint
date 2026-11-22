@@ -358,6 +358,10 @@ def open_settings(
             config.data = copy.deepcopy(DEFAULTS)
             config.set("security", security_data)
             config.save()
+            if on_saved is not None:
+                # Hotkeys and the cursor size are applied by on_saved; without
+                # it the reset would not take effect until the next save.
+                on_saved()
             win.destroy()
             open_settings(root, config, security, version, on_saved, controller)
 

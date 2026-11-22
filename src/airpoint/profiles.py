@@ -76,6 +76,8 @@ class ProfileStore:
         for path in sorted(self.dir.glob("*.json")):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    continue
                 names.append(payload.get("name") or path.stem)
             except (OSError, ValueError):
                 continue
@@ -88,6 +90,8 @@ class ProfileStore:
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
+                continue
+            if not isinstance(payload, dict):
                 continue
             name = payload.get("name") or path.stem
             created = float(payload.get("created", 0) or 0)
@@ -131,9 +135,15 @@ class ProfileStore:
     def load(self, name: str) -> None:
         path = self._path(name)
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            # A hand-edited or truncated profile must not stop the app from
+            # starting; load_last() runs before the UI exists.
+            return
         data = payload.get("data", {})
+        if not isinstance(data, dict):
+            data = {}
         for key in SECTIONS:
-            if key in data:
+            if isinstance(data.get(key), dict):
                 self.config.data[key] = copy.deepcopy(data[key])
         saved = payload.get("signature")
         if isinstance(saved, dict) and saved.get("seat"):
@@ -166,6 +176,8 @@ class ProfileStore:
         payload = json.loads(
             self._path(old).read_text(encoding="utf-8")
         )
+        if not isinstance(payload, dict):
+            return
         payload["name"] = new
         self._path(new).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -204,6 +216,8 @@ class ProfileStore:
                 self._path(name).read_text(encoding="utf-8")
             )
         except (OSError, ValueError):
+            return False
+        if not isinstance(payload, dict):
             return False
         saved = payload.get("signature")
         if not isinstance(saved, dict):

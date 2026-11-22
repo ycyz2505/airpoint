@@ -827,6 +827,20 @@ class DiagnosticsTests(unittest.TestCase):
 
 
 class CaptureTargetTests(unittest.TestCase):
+    def test_backend_order_follows_the_configured_backend(self):
+        import cv2
+
+        from airpoint.capture import backend_order
+
+        with TempConfig() as config:
+            self.assertEqual(backend_order(config)[0], cv2.CAP_DSHOW)
+            config.set("camera.backend", "msmf")
+            self.assertEqual(backend_order(config)[0], cv2.CAP_MSMF)
+            config.set("camera.backend", "any")
+            self.assertEqual(backend_order(config)[0], cv2.CAP_ANY)
+            config.set("camera.backend", "nonsense")
+            self.assertEqual(backend_order(config)[0], cv2.CAP_DSHOW)
+
     def test_default_tries_4k_then_1080p(self):
         from airpoint.capture import targets_for
 
@@ -1366,6 +1380,102 @@ class SettingsSchemaTests(unittest.TestCase):
                     node = node.get(part) if isinstance(node, dict) else None
                 self.assertIn(str(node), [str(item) for item in options],
                               f"{key} 默认值不在选项里")
+
+
+class RobustnessTests(unittest.TestCase):
+    """Damaged files on disk must never stop the service (§12.5)."""
+
+    def test_a_truncated_config_falls_back_to_the_backup(self):
+        with tempfile.TemporaryDirectory() as home:
+            path = Path(home) / "config.json"
+            (Path(home) / "config.json.bak").write_text(
+                '{"security": {"salt": "keep-me"}}', encoding="utf-8"
+            )
+            path.write_text('{"security":', encoding="utf-8")
+            config = Config(path)
+            self.assertEqual(config.get("security.salt"), "keep-me")
+
+    def test_a_deleted_config_still_means_defaults(self):
+        with tempfile.TemporaryDirectory() as home:
+            path = Path(home) / "config.json"
+            (Path(home) / "config.json.bak").write_text(
+                '{"security": {"salt": "old"}}', encoding="utf-8"
+            )
+            config = Config(path)
+            self.assertIsNone(config.get("security.salt"))
+
+    def test_reload_ignores_a_newer_schema_file(self):
+        with TempConfig() as config:
+            config.set("pointer.gain_relative", 2.5)
+            config.save()
+            config.path.write_text(
+                json.dumps({
+                    "schema_version": 99,
+                    "pointer": {"gain_relative": 9.0},
+                }),
+                encoding="utf-8",
+            )
+            self.assertFalse(config.reload_if_changed())
+            self.assertEqual(config.get("pointer.gain_relative"), 2.5)
+            # It must not re-read the newer file on every frame either.
+            self.assertFalse(config.reload_if_changed())
+
+    def test_save_is_atomic_and_leaves_no_temp_file(self):
+        with TempConfig() as config:
+            config.set("pointer.gain_relative", 1.9)
+            config.save()
+            tmp = config.path.parent / (config.path.name + ".tmp")
+            self.assertFalse(tmp.exists())
+            raw = json.loads(config.path.read_text(encoding="utf-8"))
+            self.assertEqual(raw["pointer"]["gain_relative"], 1.9)
+
+    def test_a_malformed_profile_does_not_crash_the_startup_path(self):
+        from airpoint.profiles import ProfileStore
+
+        with tempfile.TemporaryDirectory() as home:
+            old = os.environ.get("OPTICALINPUT_HOME")
+            os.environ["OPTICALINPUT_HOME"] = home
+            try:
+                config = Config(Path(home) / "config.json")
+                store = ProfileStore(config)
+                (store.dir / "bad.json").write_text(
+                    "[1, 2, 3]", encoding="utf-8"
+                )
+                (store.dir / "weird.json").write_text(
+                    json.dumps({"name": "weird", "data": [1, 2]}),
+                    encoding="utf-8",
+                )
+                store.load("bad")
+                store.load("weird")
+                store.load_last()
+                self.assertEqual(store.list(), ["weird"])
+                self.assertFalse(store.seat_changed())
+            finally:
+                os.environ.pop("OPTICALINPUT_HOME", None)
+                if old is not None:
+                    os.environ["OPTICALINPUT_HOME"] = old
+
+
+class RecordingGuardTests(unittest.TestCase):
+    def test_frames_of_a_different_size_are_dropped(self):
+        import numpy as np
+
+        from airpoint.recording import Recorder
+
+        class Writer:
+            def __init__(self):
+                self.sizes = []
+
+            def write(self, frame):
+                self.sizes.append(frame.shape)
+
+        with TempConfig() as config:
+            recorder = Recorder(config, lambda _message: None)
+            recorder.writer = Writer()
+            recorder._size = (1920, 1080)
+            recorder.write(np.zeros((720, 1280, 3), dtype=np.uint8))
+            recorder.write(np.zeros((1080, 1920, 3), dtype=np.uint8))
+            self.assertEqual(recorder.writer.sizes, [(1080, 1920, 3)])
 
 
 class SupervisorTests(unittest.TestCase):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 from .paths import data_dir
@@ -250,12 +251,24 @@ class Config:
             return None
         return info.st_mtime_ns, info.st_size
 
-    def load(self) -> None:
+    def _read_json(self, path):
         try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
+            raw = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return
-        if not isinstance(raw, dict):
+            return None
+        return raw if isinstance(raw, dict) else None
+
+    def load(self) -> None:
+        raw = self._read_json(self.path)
+        if raw is None:
+            if not self.path.exists():
+                # No file at all is a first run, not a damaged one; a deleted
+                # config must still mean "start from defaults".
+                return
+            # A crash or a power cut during save can truncate config.json.
+            # The .bak copy still holds the password and the last settings.
+            raw = self._read_json(self.path.with_name("config.json.bak"))
+        if raw is None:
             return
         try:
             version = int(raw.get("schema_version", SCHEMA_VERSION))
@@ -306,6 +319,11 @@ class Config:
             version = int(raw.get("schema_version", SCHEMA_VERSION))
         except (TypeError, ValueError):
             version = SCHEMA_VERSION
+        if version > SCHEMA_VERSION:
+            # A newer build wrote this file; its keys may mean something
+            # else here, so keep the live tree and stop re-reading it.
+            self._stamp = stamp
+            return False
         self.migrated = migrate(raw, version)
         self._merge(merged, raw)
         merged["schema_version"] = SCHEMA_VERSION
@@ -327,10 +345,12 @@ class Config:
     def save(self) -> None:
         self.data["schema_version"] = SCHEMA_VERSION
         self._keep_copy()
-        self.path.write_text(
-            json.dumps(self.data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        text = json.dumps(self.data, ensure_ascii=False, indent=2) + "\n"
+        # Write beside the target and rename, so a crash mid-write cannot
+        # leave a truncated config.json behind.
+        tmp = self.path.with_name(self.path.name + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, self.path)
         self._stamp = self._stat()
 
     def get(self, dotted: str, default=None):
