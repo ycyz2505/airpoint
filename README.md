@@ -60,7 +60,9 @@ settings → 更新 shows the current version, the last check and a manual butto
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
   `Ctrl+Alt+Shift+F8` control bar, `F12` emergency stop.
 - Preview/diagnostics window with the camera image, pose skeleton, wrist hit
-  rate, and live gain/smoothing/prediction sliders.
+  rate, and live gain/smoothing/prediction sliders. The status strip along the
+  top carries the tier, mode, fps, governor level, palm size, drop rate and
+  per-frame cost.
 - Left click by pinch or fist; right click by holding 1 s; drag, double click,
   and edge wheel scrolling.
 - Single-hand and two-hand schemes (right hand moves, left hand clicks).
@@ -103,7 +105,8 @@ settings → 更新 shows the current version, the last check and a manual butto
   strokes drawn in the Seewo whiteboard come out as lines instead of jitter,
   and a minimum step keeps sub-pixel drift from becoming a wobbly stroke.
 - Control bar: a small always-on-top bar with activate, click, mode, preview,
-  and settings, reachable by the air cursor at six metres.
+  and settings, reachable by the air cursor at six metres. Its buttons are
+  padded to 120 px so they are still hittable from the back row.
 - Performance governor: six levels from full quality down to pause, chosen
   from the process CPU and working set, with a slow recovery back up.
 - Tiering now only changes the mapping mode by default; gesture scheme changes

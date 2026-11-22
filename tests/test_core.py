@@ -1473,5 +1473,48 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("metrics.csv", text)
 
 
+class StatusLineTests(unittest.TestCase):
+    def test_capability_strip_is_drawn(self):
+        import numpy as np
+
+        from airpoint.overlay import draw_status
+
+        frame = np.zeros((180, 640, 3), dtype=np.uint8)
+        draw_status(frame, {
+            "active": True,
+            "mode": "absolute",
+            "tier": "B",
+            "fps": 12.0,
+            "perf": "L0 全质量",
+            "proc_ms": 34.0,
+            "palm_px": 34.0,
+            "drop": 0.12,
+        })
+        # Something was painted into the top strip.
+        self.assertGreater(int(frame[:30].sum()), 0)
+        # And nothing below it, so the bar stays out of the picture.
+        self.assertEqual(int(frame[40:].sum()), 0)
+
+    def test_status_line_survives_missing_metrics(self):
+        import numpy as np
+
+        from airpoint.overlay import draw_status
+
+        frame = np.zeros((120, 320, 3), dtype=np.uint8)
+        draw_status(frame, {})
+        self.assertGreater(int(frame.sum()), 0)
+
+    def test_blocked_window_is_reported(self):
+        import numpy as np
+
+        from airpoint.overlay import draw_status
+
+        plain = np.zeros((120, 640, 3), dtype=np.uint8)
+        blocked = np.zeros((120, 640, 3), dtype=np.uint8)
+        draw_status(plain, {"active": True})
+        draw_status(blocked, {"active": True, "blocked": True})
+        self.assertNotEqual(plain.tobytes(), blocked.tobytes())
+
+
 if __name__ == "__main__":
     unittest.main()

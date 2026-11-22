@@ -2,25 +2,41 @@ from __future__ import annotations
 
 import time
 import tkinter as tk
+from tkinter import font as tkfont
 
 import cv2
 
 from .config import Config
 
+BAR_FONT = ("Microsoft YaHei UI", 14)
 
-def _label(text: str, command, parent) -> tk.Button:
+
+def _label(text: str, command, parent, min_width: int = 0) -> tk.Button:
+    """A flat bar button, padded out to at least ``min_width`` pixels.
+
+    §10.2 wants 120–160 px targets so the bar is still hittable from six to
+    nine metres; a two-character label at this font would otherwise come out
+    around half that.
+    """
+    padx = 12
+    if min_width > 0:
+        try:
+            measured = tkfont.Font(font=BAR_FONT).measure(text)
+            padx = max(padx, int((min_width - measured) / 2))
+        except tk.TclError:
+            pass
     return tk.Button(
         parent,
         text=text,
         command=command,
-        font=("Microsoft YaHei UI", 12),
+        font=BAR_FONT,
         relief="flat",
         bg="#2b2b2b",
         fg="#f0f0f0",
         activebackground="#3d3d3d",
         activeforeground="#ffffff",
-        padx=12,
-        pady=6,
+        padx=padx,
+        pady=10,
         bd=0,
         highlightthickness=0,
     )
@@ -75,37 +91,60 @@ class ControlBar:
         self._status = tk.Label(
             frame,
             text="● 暂停",
-            font=("Microsoft YaHei UI", 11),
+            font=("Microsoft YaHei UI", 13),
             bg="#1b1b1b",
             fg="#ffb400",
             padx=6,
         )
         self._status.pack(side="left")
 
-        self._toggle = _label("激活", self._toggle_active, frame)
+        # §10.2 asks for 120–160 px targets. Eleven of them plus the status
+        # fit a 1920 panel; on a narrower one they are trimmed just enough to
+        # stay on screen and never below a still-hittable 88 px.
+        self._toggle = _label("激活", self._toggle_active, frame, 120)
+        buttons = [self._toggle]
         self._toggle.pack(side="left", padx=2)
-        _label("左键", lambda: self._click("left"), frame).pack(
-            side="left", padx=2
-        )
-        _label("右键", lambda: self._click("right"), frame).pack(
-            side="left", padx=2
-        )
-        _label("模式", self._toggle_mode, frame).pack(side="left", padx=2)
-        self._tier_button = _label("档位", self._cycle_tier, frame)
+        for text, command in (
+            ("左键", lambda: self._click("left")),
+            ("右键", lambda: self._click("right")),
+            ("模式", self._toggle_mode),
+        ):
+            button = _label(text, command, frame, 120)
+            button.pack(side="left", padx=2)
+            buttons.append(button)
+        self._tier_button = _label("档位", self._cycle_tier, frame, 120)
         self._tier_button.pack(side="left", padx=2)
-        self._gesture_button = _label("手势", self._cycle_click, frame)
+        buttons.append(self._tier_button)
+        self._gesture_button = _label("手势", self._cycle_click, frame, 120)
         self._gesture_button.pack(side="left", padx=2)
-        _label("标定", self._recalibrate, frame).pack(side="left", padx=2)
-        _label("预览", self._preview, frame).pack(side="left", padx=2)
-        _label("设置", self._settings, frame).pack(side="left", padx=2)
-        _label("急停", self._stop, frame).pack(side="left", padx=2)
-        _label("退出", self._exit, frame).pack(side="left", padx=2)
+        buttons.append(self._gesture_button)
+        for text, command in (
+            ("标定", self._recalibrate),
+            ("预览", self._preview),
+            ("设置", self._settings),
+            ("急停", self._stop),
+            ("退出", self._exit),
+        ):
+            button = _label(text, command, frame, 120)
+            button.pack(side="left", padx=2)
+            buttons.append(button)
 
         win.update_idletasks()
-        width = win.winfo_reqwidth()
         screen_w = win.winfo_screenwidth()
         screen_h = win.winfo_screenheight()
-        win.geometry(f"+{(screen_w - width) // 2}+{screen_h - 96}")
+        overflow = win.winfo_reqwidth() - (screen_w - 16)
+        if overflow > 0:
+            trim = overflow // (2 * len(buttons)) + 1
+            for button in buttons:
+                current = int(button.cget("padx"))
+                button.configure(padx=max(6, current - trim))
+            win.update_idletasks()
+        width = win.winfo_reqwidth()
+        height = win.winfo_reqheight()
+        win.geometry(
+            f"+{max(0, (screen_w - width) // 2)}"
+            f"+{max(0, screen_h - height - 24)}"
+        )
 
         win.protocol("WM_DELETE_WINDOW", self.hide)
         self._refresh()
@@ -437,12 +476,18 @@ class ScreenHud:
 
 
 def draw_status(frame, stats: dict) -> None:
-    """Burn a compact status line into the preview frame."""
+    """Burn a compact status line into the preview frame.
+
+    §10.1's line is ``B 中距 · 绝对 · 已激活`` plus the capability strip
+    (palm pixels, drop rate, latency). The preview is the only place the
+    capability strip lives, so the full-screen HUD never covers the lesson.
+    """
     if frame is None:
         return
     height, width = frame.shape[:2]
+    bar_height = 34 if width >= 900 else 30
     overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (width, 30), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (0, 0), (width, bar_height), (20, 20, 20), -1)
     cv2.addWeighted(overlay, 0.6, frame, 0.4, 0, frame)
 
     state = "REC" if stats.get("recording") else (
@@ -451,16 +496,29 @@ def draw_status(frame, stats: dict) -> None:
     color = (80, 80, 255) if stats.get("recording") else (
         (80, 220, 80) if stats.get("active") else (80, 190, 255)
     )
-    text = (
-        f"{state}  {stats.get('mode', '')}  tier {stats.get('tier', '-')}  "
-        f"{stats.get('fps', 0.0):.1f} fps  {stats.get('perf', '')}  "
-        f"{stats.get('proc_ms', 0.0):.0f} ms"
-    )
+    parts = [
+        state,
+        f"tier {stats.get('tier', '-')}",
+        str(stats.get("mode", "")),
+        f"{stats.get('fps', 0.0):.1f} fps",
+        str(stats.get("perf", "")),
+    ]
+    palm = float(stats.get("palm_px") or 0.0)
+    if palm > 0:
+        parts.append(f"palm {palm:.0f}px")
+    drop = stats.get("drop")
+    if drop is not None:
+        parts.append(f"drop {float(drop) * 100.0:.0f}%")
+    parts.append(f"{stats.get('proc_ms', 0.0):.0f} ms")
+    text = "  ".join(part for part in parts if part)
     if stats.get("presentation"):
         text = "DEMO  " + text
     if stats.get("blocked"):
         text += "  目标窗口提权，无法点击"
+    scale = 0.62 if width >= 900 else 0.55
+    thickness = 2 if width >= 900 else 1
+    baseline = bar_height - 9
     cv2.putText(
-        frame, text, (8, 21), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1,
-        cv2.LINE_AA,
+        frame, text, (8, baseline), cv2.FONT_HERSHEY_SIMPLEX, scale, color,
+        thickness, cv2.LINE_AA,
     )

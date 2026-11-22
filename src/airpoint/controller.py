@@ -886,6 +886,9 @@ class Controller:
                         "tier": tier_state.name,
                         "fps": fps,
                         "perf": self.governor.name,
+                        "proc_ms": self._proc_ms,
+                        "palm_px": self._last_palm_px,
+                        "drop": drop,
                         "presentation": bool(
                             self.config.get("overlay.presentation", False)
                         ),
