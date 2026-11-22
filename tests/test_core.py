@@ -173,6 +173,16 @@ class TwoHandTests(unittest.TestCase):
 
 
 class TierTests(unittest.TestCase):
+    def test_palm_pixels_are_reported_at_1080p(self):
+        from airpoint.tiers import palm_px_1080
+
+        # 0.02 of the frame width is 38 px at 1080p but 77 px at 4K; the
+        # acceptance thresholds only make sense against the 1080p number, so
+        # the same hand must score the same on either camera.
+        self.assertAlmostEqual(palm_px_1080(0.02), 38.4)
+        self.assertAlmostEqual(palm_px_1080(0.02) / 1920.0, 0.02)
+        self.assertAlmostEqual(palm_px_1080(0.0), 0.0)
+
     def _run(self, engine, shoulder, palm, now):
         return engine.update(shoulder, palm, 0.0, 0.9, False, now)
 
@@ -722,6 +732,27 @@ class CaptureTargetTests(unittest.TestCase):
             config.set("camera.prefer_4k", False)
             self.assertEqual(targets_for(config), [(1920, 1080)])
 
+    def test_governor_cap_drops_4k_and_keeps_explicit_modes(self):
+        from airpoint.capture import limit_for_level, targets_for
+
+        with TempConfig() as config:
+            self.assertIsNone(limit_for_level(0))
+            self.assertEqual(limit_for_level(1), 1920)
+            self.assertEqual(
+                targets_for(config, limit_for_level(1)), [(1920, 1080)]
+            )
+            config.set("camera.width", 2560)
+            config.set("camera.height", 1440)
+            self.assertEqual(
+                targets_for(config, 1920), [(1920, 1080)]
+            )
+            # A smaller explicit mode must survive the cap untouched.
+            config.set("camera.width", 1280)
+            config.set("camera.height", 720)
+            self.assertEqual(
+                targets_for(config, 1920), [(1280, 720), (1920, 1080)]
+            )
+
 
 class LoggingTests(unittest.TestCase):
     def test_rotation_keeps_a_backup(self):
@@ -1013,6 +1044,69 @@ class ProfileTests(unittest.TestCase):
                     config.get("pointer.box"), [0.1, 0.2, 0.3, 0.4]
                 )
                 self.assertEqual(config.get("profile.current"), "seat")
+            finally:
+                if old is None:
+                    os.environ.pop("OPTICALINPUT_HOME", None)
+                else:
+                    os.environ["OPTICALINPUT_HOME"] = old
+
+    def test_names_follow_seat_camera_and_resolution(self):
+        from airpoint.profiles import suggest_name
+
+        with TempConfig() as config:
+            config.set("wizard.seat", "sit")
+            config.set("camera.device", "1")
+            config.set("camera.width", 2560)
+            config.set("camera.height", 1440)
+            self.assertEqual(suggest_name(config), "坐_摄像头1_2560x1440")
+            config.set("wizard.seat", "stand")
+            config.set("camera.device", "auto")
+            config.set("camera.width", 0)
+            config.set("camera.height", 0)
+            self.assertEqual(suggest_name(config), "站_自动_auto")
+
+    def test_seat_changed_detects_a_moved_panel(self):
+        from airpoint.profiles import ProfileStore
+
+        with tempfile.TemporaryDirectory() as home:
+            old = os.environ.get("OPTICALINPUT_HOME")
+            os.environ["OPTICALINPUT_HOME"] = home
+            try:
+                config = Config(Path(home) / "config.json")
+                config.set("wizard.seat", "stand")
+                store = ProfileStore(config)
+                store.save("seat")
+                self.assertFalse(store.seat_changed())
+
+                config.set("wizard.seat", "sit")
+                self.assertTrue(store.seat_changed())
+                store.save("seat")
+                self.assertFalse(store.seat_changed())
+
+                # A different camera invalidates the saved box too.
+                config.set("camera.device", "2")
+                self.assertTrue(store.seat_changed())
+            finally:
+                if old is None:
+                    os.environ.pop("OPTICALINPUT_HOME", None)
+                else:
+                    os.environ["OPTICALINPUT_HOME"] = old
+
+    def test_load_restores_the_seat_it_was_saved_for(self):
+        from airpoint.profiles import ProfileStore
+
+        with tempfile.TemporaryDirectory() as home:
+            old = os.environ.get("OPTICALINPUT_HOME")
+            os.environ["OPTICALINPUT_HOME"] = home
+            try:
+                config = Config(Path(home) / "config.json")
+                config.set("wizard.seat", "sit")
+                store = ProfileStore(config)
+                store.save("seat")
+                config.set("wizard.seat", "stand")
+                store.load("seat")
+                self.assertEqual(config.get("wizard.seat"), "sit")
+                self.assertFalse(store.seat_changed())
             finally:
                 if old is None:
                     os.environ.pop("OPTICALINPUT_HOME", None)

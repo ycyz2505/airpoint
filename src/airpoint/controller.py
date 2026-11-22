@@ -9,7 +9,7 @@ from pathlib import Path
 import cv2
 
 from . import inject
-from .capture import Camera
+from .capture import Camera, limit_for_level
 from .diagnostics import Diagnostics
 from .gestures import GestureEngine, TwoHandOpen
 from .hands import HandTracker
@@ -20,7 +20,7 @@ from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
 from .selfcal import SelfCalibrator
-from .tiers import TierEngine
+from .tiers import TierEngine, palm_px_1080
 from .writing import StrokeSmoother
 
 
@@ -47,6 +47,8 @@ class Controller:
         self._v_since = 0.0
         self._proc_ms = 0.0
         self._frame_index = 0
+        self._cap_latched = False
+        self._cap_trips = 0
         self._last_mode = ""
         self._inside = False
         self._calibrating = threading.Event()
@@ -364,6 +366,8 @@ class Controller:
 
             if self._reset.is_set():
                 self._reset.clear()
+                self._cap_latched = False
+                self._cap_trips = 0
                 pointer.reset()
                 absolute.reset()
                 gestures.reset()
@@ -493,6 +497,31 @@ class Controller:
             if level >= 1 and self._frame_index % self.governor.frame_divisor():
                 continue
 
+            cap_width = limit_for_level(level)
+            if cap_width and not self._cap_latched and camera.opened:
+                if camera.width > cap_width:
+                    # Reopening at the smaller mode is the only way decode
+                    # cost actually drops; resizing after the read still pays
+                    # for 4K.
+                    self._cap_latched = True
+                    self._cap_trips += 1
+                    self.log(
+                        f"capture capped to {cap_width}px "
+                        f"({self.governor.name})"
+                    )
+                    camera.max_width = cap_width
+                    camera.close()
+                    continue
+            elif level == 0 and self._cap_latched and self._cap_trips < 2:
+                # Back to full quality once the ladder has climbed all the
+                # way down. Two trips means 4K really is too heavy here, so
+                # the cap stays for the rest of the session instead of
+                # reopening the camera every few minutes.
+                self._cap_latched = False
+                camera.max_width = None
+                camera.close()
+                continue
+
             height, width = frame.shape[:2]
             frame_time = time.time()
             analysis_width = 1280 if level == 0 else 960
@@ -564,8 +593,8 @@ class Controller:
                 last_hit = now
                 self._hits += 1
                 if moving_result and moving_result.get("palm"):
-                    self._last_palm_px = (
-                        float(moving_result["palm"]) * width
+                    self._last_palm_px = palm_px_1080(
+                        float(moving_result["palm"])
                     )
                 self._personalize(moving_result)
 

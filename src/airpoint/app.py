@@ -21,7 +21,14 @@ from .preview import PreviewBus, open_preview
 from .profiles import ProfileStore
 from .security import Security
 from .tray import create_icon
-from .ui import UiThread, ask_new_password, ask_password, open_settings, show_error
+from .ui import (
+    UiThread,
+    ask_confirm,
+    ask_new_password,
+    ask_password,
+    open_settings,
+    show_error,
+)
 from .version import __version__
 
 ERROR_ALREADY_EXISTS = 183
@@ -111,7 +118,8 @@ def main() -> None:
     log_dir()
     updates_dir()
     config = Config()
-    ProfileStore(config).load_last()
+    profiles = ProfileStore(config)
+    loaded_profile = profiles.load_last()
     security = Security(config)
     log = make_logger("app", config)
     log(f"start {__version__}")
@@ -435,6 +443,17 @@ def main() -> None:
 
     if not security.has_password:
         ui.post(first_run)
+    elif loaded_profile and profiles.seat_changed():
+        def ask_redraw(root) -> None:
+            if not ask_confirm(
+                root,
+                f"检测到新位置（当前档案「{loaded_profile}」是给别的位置"
+                "存的），重新画框？",
+            ):
+                return
+            open_wizard_now(root)
+
+        ui.post(ask_redraw)
 
     hotkeys = Hotkeys(
         config,

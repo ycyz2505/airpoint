@@ -89,6 +89,12 @@ def show_error(parent, text: str) -> None:
     messagebox.showerror("OpticalInputSvc", text, parent=parent)
 
 
+def ask_confirm(parent, text: str) -> bool:
+    return bool(
+        messagebox.askyesno("OpticalInputSvc", text, parent=parent)
+    )
+
+
 SECTIONS = [
     (
         "更新",
@@ -181,6 +187,9 @@ SECTIONS = [
             ("pointer.v_scroll", "近距 V 字手势滚动", "bool"),
             ("pointer.self_calib", "点击自动校正偏移", "bool"),
             ("pointer.gain_relative", "相对增益", "float"),
+            ("pointer.accel_enabled", "速度加速", "bool"),
+            ("pointer.accel_v0", "加速起点", "float"),
+            ("pointer.accel_max", "加速上限", "float"),
             ("pointer.deadzone_px", "死区（px）", "float"),
             ("pointer.prediction_ms", "预测（ms）", "int"),
             ("pointer.max_step_px", "单帧最大位移（px）", "float"),
@@ -483,23 +492,31 @@ def _build_profiles(notebook, config, on_saved, reopen) -> None:
     frame.columnconfigure(0, weight=1)
 
     store = ProfileStore(config)
+    shown = []
 
     def refresh() -> None:
         listbox.delete(0, tk.END)
-        for name in store.list():
-            listbox.insert(tk.END, name)
+        shown.clear()
+        for name, _created, used in store.entries():
+            stamp = (
+                time.strftime("%m-%d %H:%M", time.localtime(used))
+                if used
+                else ""
+            )
+            shown.append(name)
+            listbox.insert(tk.END, f"{name}    {stamp}" if stamp else name)
 
     def selected():
         selection = listbox.curselection()
         if not selection:
             return None
-        return listbox.get(selection[0])
+        return shown[selection[0]]
 
     def save_current() -> None:
         name = simpledialog.askstring(
             "保存档案",
             "档案名：",
-            initialvalue=time.strftime("座位_%Y%m%d_%H%M"),
+            initialvalue=store.suggest_name(),
             parent=frame,
         )
         if not name or not name.strip():
@@ -575,6 +592,7 @@ def _build_profiles(notebook, config, on_saved, reopen) -> None:
         frame,
         text=(
             "档案保存框、9 点标定、指针手感、档位、手势和摄像头设置。"
+            "默认按“坐/站 + 摄像头 + 分辨率”命名，可改名。"
             "保存前请先点“保存”写入当前设置。"
         ),
         wraplength=620,

@@ -44,8 +44,12 @@ automatic updates.
 
 - Camera capture at the size picked in settings (falling back to 4K and then
   1080p if the device refuses it); automatic device and backend selection.
-  The hand crop is capped at 640 px a side, since the model works at 224
-  internally and a 4K crop would only waste decode time.
+  MJPEG is requested first and YUY2 is tried when the device refuses it, and a
+  short manual exposure is kept only when the driver reads it back. The hand
+  crop is capped at 640 px a side, since the model works at 224 internally and
+  a 4K crop would only waste decode time. When the performance governor reaches
+  L1 the device is reopened at 1920 wide, because resizing after the read still
+  pays for 4K decode; it returns to 4K at L0 unless it has tripped twice.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
@@ -67,7 +71,10 @@ automatic updates.
   picks relative + two hands and drops hand gestures when the hand is too
   small. Manual lock and advisory-only mode are available.
 - Seat profiles: save and load the box, nine-point calibration, feel settings,
-  tier lock, gestures, and camera settings. The last profile loads at startup.
+  tier lock, gestures, and camera settings. Names default to
+  `坐/站_摄像头_分辨率` and can be renamed. The last profile loads at startup;
+  if the seat, camera or resolution no longer match, the app asks whether to
+  redraw the box.
 - Physical mouse takeover: moving the real mouse pauses the air cursor and it
   resumes after 3 seconds of mouse inactivity; a hotkey or tray toggle cancels
   the automatic resume.

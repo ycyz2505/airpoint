@@ -27,7 +27,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
     from PIL import Image, ImageTk
 
     from .calibrate import run_calibration
-    from .profiles import ProfileStore
+    from .profiles import ProfileStore, suggest_name
 
     existing = getattr(root, "_wizard_window", None)
     if existing is not None:
@@ -234,7 +234,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
     def save_profile() -> None:
         name = str(config.get("wizard.profile", "") or "").strip()
         if not name:
-            name = "教室"
+            name = suggest_name(config)
         config.set("wizard.seat", seat.get())
         config.set("wizard.done", True)
         config.set("wizard.profile", name)

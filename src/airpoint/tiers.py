@@ -77,6 +77,17 @@ def suggest_tier(
     return target, f"{band} 档（{reason}）"
 
 
+def palm_px_1080(palm: float) -> float:
+    """Palm size in pixels at 1080p, whatever the capture width is.
+
+    ``palm`` is a distance normalised to frame width, so raw pixels double at
+    4K. The tier thresholds (``tier.palm_ok`` 20 px, ``tier.palm_good`` 30 px)
+    are the 1080p numbers from the acceptance matrix; without this the same
+    hand at the same seat would score a whole tier better on a 4K camera.
+    """
+    return max(0.0, float(palm)) * 1920.0
+
+
 class TierEngine:
     def __init__(self, config, log):
         self.config = config

@@ -14,7 +14,7 @@ from .gestures import GestureEngine
 from .hands import HandTracker
 from .pointer import AbsolutePointer, RelativePointer
 from .pose import PoseTracker
-from .tiers import TierEngine
+from .tiers import TierEngine, palm_px_1080
 
 
 class ReplayAnalyzer:
@@ -144,7 +144,7 @@ class ReplayAnalyzer:
                 if result is not None:
                     hand_hits += 1
                     if result.get("palm"):
-                        last_palm_px = float(result["palm"]) * width
+                        last_palm_px = palm_px_1080(float(result["palm"]))
                         palm_values.append(last_palm_px)
 
             point = None
