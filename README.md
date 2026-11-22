@@ -12,9 +12,9 @@ meters away.
 Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
-survey mode, a first-run wizard, a suggested mapping box, online
-self-calibration, double-click detection, and a configurable target display
-for multi-monitor classrooms.
+survey mode, an environment self-check, a first-run wizard, a suggested and
+editable mapping box, online self-calibration, double-click detection, and a
+configurable target display for multi-monitor classrooms.
 
 ## Planned capabilities
 
@@ -163,10 +163,23 @@ build is left untouched and the app starts from defaults.
 - Survey mode: a fullscreen camera view with large statistics and a 30-second
   test that measures shoulder width, palm size, drop rate, and confidence, then
   suggests a tier (with the reason) and can lock it in one click.
-- Tray additions: **首次向导…**, **勘测模式…**, **重新标定…**, and **打开数据目录**.
+- Tray additions: **首次向导…**, **勘测模式…**, **环境自检…**, **重新标定…**, and
+  **打开数据目录**.
 - Mapping-box suggestion: the preview's **建议框** button takes the pose body
   bounding rect, pads it, and snaps it to the screen aspect, so the box can be
-  set from six metres without drawing it by hand.
+  set from six metres without drawing it by hand. **调整框** then makes the box
+  editable: drag any of the four yellow corner handles to resize, drag inside
+  it to slide the whole box, and a **框对应屏幕** panel draws the target
+  display at its aspect with the box inside it and reports how much of the
+  screen it covers. A dashed outline shows the 20 % tracking zone, so it is
+  obvious whether the wrist will leave it mid-gesture.
+- Environment self-check (**环境自检…**): enumerates each display's rect, DPI
+  and scaling, then pauses the controller and probes the camera device by
+  device, reading back the resolution, frame rate and whether a frame actually
+  arrived rather than trusting what was requested. It also reports whether
+  manual exposure takes effect, judges whether 4K is available, whether the
+  frame rate is too low, and which display number to pick, shows the result in
+  a window, and saves it to `reports\env-*.txt`.
 - First-run wizard: seven steps (camera, hand visible, seat, active area,
   calibration, gestures, save) with a live camera view, a 10-second measurement
   that suggests a tier, one-click box creation, calibration, and a seat profile.
