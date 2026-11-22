@@ -173,6 +173,18 @@ class TwoHandTests(unittest.TestCase):
 
 
 class TierTests(unittest.TestCase):
+    def test_capability_score_rewards_big_hands_and_few_drops(self):
+        from airpoint.tiers import capability
+
+        config = Config.__new__(Config)
+        config.data = {"tier": {"palm_good": 30.0}}
+
+        self.assertEqual(capability(0.0, 1.0, config), 0)
+        self.assertEqual(capability(30.0, 0.0, config), 100)
+        self.assertEqual(capability(60.0, 0.0, config), 100)
+        # Half the palm size and half the frames lost lands in the middle.
+        self.assertEqual(capability(15.0, 0.5, config), 50)
+
     def test_palm_pixels_are_reported_at_1080p(self):
         from airpoint.tiers import palm_px_1080
 

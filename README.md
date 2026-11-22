@@ -126,7 +126,9 @@ build is left untouched and the app starts from defaults.
   it running but inert.
 - The tray tooltip tracks the real state (`运行中` / `已暂停` / `录制中`) even
   with the menu closed, and the menu opens with a greyed-out status line such
-  as `B 档 · 绝对 · 运行中 · 手掌 34px`.
+  as `B 档 · 绝对 · 运行中 · 手掌 34px · 能力 78`. The capability score puts
+  half its weight on palm size and half on the hand drop rate, and it keeps
+  updating while the tier is manually locked.
 - `config.json` is watched for changes: editing it by hand (or syncing it from
   another machine) reloads it live and reopens the camera, and a half-written
   file is ignored until it parses. Logs roll to `app.1.log` instead of being

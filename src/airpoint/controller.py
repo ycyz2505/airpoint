@@ -20,7 +20,7 @@ from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
 from .selfcal import SelfCalibrator
-from .tiers import TierEngine, palm_px_1080
+from .tiers import TierEngine, capability, palm_px_1080
 from .writing import StrokeSmoother
 
 
@@ -173,8 +173,12 @@ class Controller:
             state = "录制中"
         elif self._mouse_takeover:
             state = "物理鼠标"
+        score = capability(
+            self._last_palm_px, self._tier.drop, self.config
+        )
         return (
-            f"{self._tier.current} 档 · {name} · {state} · 手掌 {palm}px"
+            f"{self._tier.current} 档 · {name} · {state} · "
+            f"手掌 {palm}px · 能力 {score}"
         )
 
     def take_bar_request(self) -> bool:
@@ -952,6 +956,9 @@ class Controller:
                         "tier_applied": tier_state.applied,
                         "hands_on": hands_on,
                         "palm_px": self._last_palm_px,
+                        "capability": capability(
+                            self._last_palm_px, drop, self.config
+                        ),
                         "perf": self.governor.name,
                         "cpu": self.governor.cpu,
                         "rss": self.governor.rss_mb,

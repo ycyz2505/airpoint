@@ -88,6 +88,22 @@ def palm_px_1080(palm: float) -> float:
     return max(0.0, float(palm)) * 1920.0
 
 
+def capability(palm_px: float, drop: float, config) -> int:
+    """0–100 capability score for the tray menu (§5.1, §10.4).
+
+    The tier only says which band was chosen; the score says how comfortably
+    the measurements sit inside it. Palm size carries half of it, the drop
+    rate the other half, and each is clamped so one bad number cannot zero the
+    whole reading.
+    """
+    palm = float(palm_px or 0.0)
+    good = max(1.0, float(config.get("tier.palm_good", 30.0)))
+    palm_part = max(0.0, min(1.0, palm / good)) * 50.0
+    drop = max(0.0, min(1.0, float(drop or 0.0)))
+    drop_part = (1.0 - drop) * 50.0
+    return int(round(max(0.0, min(100.0, palm_part + drop_part))))
+
+
 class TierEngine:
     def __init__(self, config, log):
         self.config = config
