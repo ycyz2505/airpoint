@@ -13,6 +13,7 @@ from pathlib import Path
 import cv2
 
 from .config import Config
+from .controller import _tracking_zone
 from .gestures import GestureEngine
 from .hands import HandTracker
 from .pointer import AbsolutePointer, RelativePointer
@@ -107,6 +108,7 @@ class ReplayAnalyzer:
 
         moving_hand, scheme, click_name, mode, box = self._resolved()
         screen_w, screen_h = self._screen()
+        zone = _tracking_zone(box) if box else None
 
         pointer = RelativePointer(self.config)
         absolute = AbsolutePointer(self.config)
@@ -192,9 +194,15 @@ class ReplayAnalyzer:
             if wrist is not None:
                 hits += 1
                 wrist_conf.append(wrist[2])
-                result = self.hands.process(
-                    frame, wrist, self.pose.elbow(moving_hand), moving_hand
+                near = zone is None or (
+                    zone[0] <= wrist[0] <= zone[2]
+                    and zone[1] <= wrist[1] <= zone[3]
                 )
+                if near:
+                    result = self.hands.process(
+                        frame, wrist, self.pose.elbow(moving_hand),
+                        moving_hand, bounds=zone,
+                    )
                 if result is not None:
                     hand_hits += 1
                     if result.get("palm"):

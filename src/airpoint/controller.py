@@ -31,6 +31,24 @@ from .tiers import TierEngine, capability, palm_px_1080
 from .writing import StrokeSmoother
 
 
+def _tracking_zone(box, margin: float = 0.2):
+    """The mapping box grown by ``margin`` of its own size, clamped to frame.
+
+    §8.5 keeps tracking alive a little past the box so stepping out and back
+    in does not cost a re-detection, but stops the hand model entirely once
+    the hand is well clear of it.
+    """
+    x0, y0, x1, y1 = [float(item) for item in box]
+    dx = (x1 - x0) * margin
+    dy = (y1 - y0) * margin
+    return (
+        max(0.0, x0 - dx),
+        max(0.0, y0 - dy),
+        min(1.0, x1 + dx),
+        min(1.0, y1 + dy),
+    )
+
+
 class Controller:
     def __init__(self, config, log, preview=None):
         self.config = config
@@ -702,12 +720,32 @@ class Controller:
                 hands_on = False
             click_hand = "left" if moving_hand == "right" else "right"
 
+            box = self.config.get("pointer.box", [])
+            if not isinstance(box, list) or len(box) != 4:
+                box = []
+            box_gate = _tracking_zone(box) if box else None
+
             moving_result = None
             click_result = None
 
-            if hands_on and wrist is not None and self.governor.hands_allowed():
+            # §8.5: the hand model only runs while the hand is near the box,
+            # so an arm resting far outside it costs nothing.
+            near_box = True
+            if box_gate is not None and wrist is not None:
+                near_box = (
+                    box_gate[0] <= wrist[0] <= box_gate[2]
+                    and box_gate[1] <= wrist[1] <= box_gate[3]
+                )
+
+            if (
+                hands_on
+                and wrist is not None
+                and near_box
+                and self.governor.hands_allowed()
+            ):
                 moving_result = hands.process(
-                    frame, wrist, pose.elbow(moving_hand), moving_hand
+                    frame, wrist, pose.elbow(moving_hand), moving_hand,
+                    bounds=box_gate,
                 )
                 if last_hit and now - last_hit > 0.4:
                     pointer.reset()
@@ -721,6 +759,12 @@ class Controller:
 
             if hands_on and scheme == "double" and self.governor.hands_allowed():
                 click_wrist = pose.wrist(click_hand)
+                if click_wrist is not None and box_gate is not None:
+                    if not (
+                        box_gate[0] <= click_wrist[0] <= box_gate[2]
+                        and box_gate[1] <= click_wrist[1] <= box_gate[3]
+                    ):
+                        click_wrist = None
                 if click_wrist is not None:
                     if self._frame_index % 2 == 0 or last_click_result is None:
                         click_result = hands.process(
@@ -728,6 +772,7 @@ class Controller:
                             click_wrist,
                             pose.elbow(click_hand),
                             click_hand,
+                            bounds=box_gate,
                         )
                         last_click_result = click_result
                     else:
@@ -745,9 +790,11 @@ class Controller:
                     sum(lm[i][1] for i in (0, 5, 9, 13, 17)) / 5.0,
                 )
             # §5.4: palm -> held palm -> wrist -> frozen -> paused. A stale
-            # pose hold-over is not a fresh wrist, so it is not offered here.
+            # pose hold-over is not a fresh wrist, so it is not offered here;
+            # a wrist well outside the tracking zone is not offered either,
+            # since §8.5 stops tracking past it.
             point, lost = self._fallback.update(
-                palm, None if pose.stale else wrist, now
+                palm, None if (pose.stale or not near_box) else wrist, now
             )
             if lost != self._hand_lost:
                 self._hand_lost = lost
@@ -773,9 +820,6 @@ class Controller:
             else:
                 self._v_since = 0.0
 
-            box = self.config.get("pointer.box", [])
-            if not isinstance(box, list) or len(box) != 4:
-                box = []
             if mode == "auto":
                 mode = "absolute" if box else "relative"
             if mode == "absolute" and not box:

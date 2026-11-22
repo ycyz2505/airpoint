@@ -27,6 +27,29 @@ def crop_scale(width: int, height: int) -> float:
     return CROP_MAX / float(longest)
 
 
+def _clamp_crop(x0, x1, y0, y1, bounds, width, height):
+    """§6.3: keep the crop inside the tracking zone so it cannot follow
+    somebody standing well clear of the box.
+
+    The zone is normalised, the crop is in pixels. The two are intersected, so
+    a wrist at the zone's edge gets a smaller crop instead of one that reaches
+    outside; a crop that misses the zone entirely (only reachable if the caller
+    skipped the gate) is pinned inside it rather than left empty.
+    """
+    zx0 = int(max(0.0, float(bounds[0])) * width)
+    zy0 = int(max(0.0, float(bounds[1])) * height)
+    zx1 = int(min(1.0, float(bounds[2])) * width)
+    zy1 = int(min(1.0, float(bounds[3])) * height)
+
+    nx0, nx1 = max(x0, zx0), min(x1, zx1)
+    ny0, ny1 = max(y0, zy0), min(y1, zy1)
+    if nx1 <= nx0:
+        nx0, nx1 = zx0, max(zx0 + 1, zx1)
+    if ny1 <= ny0:
+        ny0, ny1 = zy0, max(zy0 + 1, zy1)
+    return nx0, nx1, ny0, ny1
+
+
 class HandTracker:
     def __init__(self, config, log):
         self.config = config
@@ -80,7 +103,7 @@ class HandTracker:
             self.log(f"hands init failed: {exc}")
             return False
 
-    def _crop(self, frame, wrist, elbow):
+    def _crop(self, frame, wrist, elbow, bounds=None):
         height, width = frame.shape[:2]
         if elbow is not None and elbow[2] > 0.4:
             dx = wrist[0] - elbow[0]
@@ -100,14 +123,16 @@ class HandTracker:
         x1 = int(min(width, (cx + half) * width))
         y0 = int(max(0, (cy - half) * height))
         y1 = int(min(height, (cy + half) * height))
+        if bounds is not None:
+            x0, x1, y0, y1 = _clamp_crop(x0, x1, y0, y1, bounds, width, height)
         if x1 - x0 < 32 or y1 - y0 < 32:
             return None
         return x0, y0, x1, y1
 
-    def process(self, frame, wrist, elbow, hand: str):
+    def process(self, frame, wrist, elbow, hand: str, bounds=None):
         if wrist is None or not self._ensure():
             return None
-        box = self._crop(frame, wrist, elbow)
+        box = self._crop(frame, wrist, elbow, bounds)
         if box is None:
             return None
         x0, y0, x1, y1 = box

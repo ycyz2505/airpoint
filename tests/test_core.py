@@ -1474,7 +1474,7 @@ class ReplayTests(unittest.TestCase):
         class FakeHands:
             ready = True
 
-            def process(self, frame, wrist, elbow, hand):
+            def process(self, frame, wrist, elbow, hand, bounds=None):
                 return {
                     "hand": hand,
                     "gesture": "open",
@@ -1574,7 +1574,7 @@ class ReplayTests(unittest.TestCase):
         class FakeHands:
             ready = True
 
-            def process(self, frame, wrist, elbow, hand):
+            def process(self, frame, wrist, elbow, hand, bounds=None):
                 return {
                     "hand": hand,
                     "gesture": "open",
@@ -1883,6 +1883,63 @@ class HandFallbackTests(unittest.TestCase):
         point, lost = fallback.update(None, None, 100.0)
         self.assertIsNone(point)
         self.assertFalse(lost)
+
+
+class TrackingZoneTests(unittest.TestCase):
+    """§8.5: the box grown by 20% is the tracking-allowed zone."""
+
+    def _zone(self, box):
+        from airpoint.controller import _tracking_zone
+
+        return _tracking_zone(box)
+
+    def test_the_zone_is_the_box_grown_by_a_fifth_per_side(self):
+        x0, y0, x1, y1 = self._zone([0.2, 0.2, 0.6, 0.6])
+        self.assertAlmostEqual(x0, 0.2 - 0.4 * 0.2)
+        self.assertAlmostEqual(y0, 0.2 - 0.4 * 0.2)
+        self.assertAlmostEqual(x1, 0.6 + 0.4 * 0.2)
+        self.assertAlmostEqual(y1, 0.6 + 0.4 * 0.2)
+
+    def test_the_zone_is_clamped_to_the_frame(self):
+        x0, y0, x1, y1 = self._zone([0.02, 0.02, 0.98, 0.98])
+        self.assertGreaterEqual(x0, 0.0)
+        self.assertGreaterEqual(y0, 0.0)
+        self.assertLessEqual(x1, 1.0)
+        self.assertLessEqual(y1, 1.0)
+
+    def test_a_hand_well_outside_the_box_is_outside_the_zone(self):
+        x0, y0, x1, y1 = self._zone([0.3, 0.3, 0.7, 0.7])
+        self.assertFalse(x0 <= 0.05 <= x1 and y0 <= 0.5 <= y1)
+
+
+class HandCropBoundsTests(unittest.TestCase):
+    """§6.3: the crop never reaches outside the tracking zone."""
+
+    def test_a_crop_straddling_the_zone_is_intersected(self):
+        from airpoint.hands import _clamp_crop
+
+        x0, x1, y0, y1 = _clamp_crop(
+            0, 400, 0, 400, (0.5, 0.5, 1.0, 1.0), 1000, 1000
+        )
+        self.assertEqual((x0, x1), (500, 1000))
+        self.assertEqual((y0, y1), (500, 1000))
+
+    def test_a_crop_already_inside_is_untouched(self):
+        from airpoint.hands import _clamp_crop
+
+        x0, x1, y0, y1 = _clamp_crop(
+            600, 800, 600, 800, (0.5, 0.5, 1.0, 1.0), 1000, 1000
+        )
+        self.assertEqual((x0, x1, y0, y1), (600, 800, 600, 800))
+
+    def test_an_empty_intersection_still_yields_a_box(self):
+        from airpoint.hands import _clamp_crop
+
+        x0, x1, y0, y1 = _clamp_crop(
+            0, 400, 0, 400, (0.9, 0.9, 1.0, 1.0), 1000, 1000
+        )
+        self.assertGreater(x1, x0)
+        self.assertGreater(y1, y0)
 
 
 class StatusLineTests(unittest.TestCase):
