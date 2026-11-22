@@ -45,6 +45,12 @@ updater instead of failing every check. Set `OPTICALINPUT_NO_UPDATE=1` to
 disable automatic updates. Update traffic is logged to `logs\update.log`, and
 settings → 更新 shows the current version, the last check and a manual button.
 
+Settings files carry a `schema_version`. An older `config.json` is migrated
+forward on load — renamed keys move to their new names, removed keys are
+dropped, and an explicit new-name value always wins — then written back once,
+with the pre-migration file kept as `config.json.bak`. A file from a newer
+build is left untouched and the app starts from defaults.
+
 ## Current build
 
 - Camera capture at the size picked in settings (falling back to 4K and then

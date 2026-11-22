@@ -1113,11 +1113,66 @@ class ConfigTests(unittest.TestCase):
             # The unknown shape is not merged in, but the file is preserved
             # so a newer build still finds its settings.
             self.assertEqual(fresh.get("pointer.hand"), "right")
-            self.assertEqual(fresh.get("schema_version"), 1)
+            self.assertEqual(fresh.get("schema_version"), 2)
             self.assertEqual(
                 json.loads(config.path.read_text(encoding="utf-8")),
                 payload,
             )
+
+    def test_old_settings_are_migrated_forward(self):
+        with TempConfig() as config:
+            payload = {
+                "schema_version": 1,
+                "overlay": {"large_cursor": True},
+                "recording": {"prefer_4k": False},
+                "logging": {"level": "debug", "max_mb": 2.0},
+            }
+            config.path.write_text(json.dumps(payload), encoding="utf-8")
+            fresh = Config(config.path)
+            # Renamed keys land on their new name.
+            self.assertTrue(fresh.get("overlay.big_cursor"))
+            self.assertFalse(fresh.get("camera.prefer_4k"))
+            # A renamed key does not overwrite an explicit new-name value.
+            # A dropped key is gone, but its sibling survives.
+            self.assertEqual(fresh.get("logging.max_mb"), 2.0)
+            self.assertIsNone(fresh.get("logging.level"))
+            self.assertEqual(
+                sorted(old for old, _ in fresh.migrated),
+                ["logging.level", "overlay.large_cursor",
+                 "recording.prefer_4k"],
+            )
+
+    def test_migration_keeps_an_explicit_new_key(self):
+        with TempConfig() as config:
+            payload = {
+                "schema_version": 1,
+                "overlay": {"large_cursor": True, "big_cursor": False},
+            }
+            config.path.write_text(json.dumps(payload), encoding="utf-8")
+            fresh = Config(config.path)
+            self.assertFalse(fresh.get("overlay.big_cursor"))
+
+    def test_inverted_key_is_flipped(self):
+        with TempConfig() as config:
+            # Old key said "run the wizard"; the new one says "it is done".
+            payload = {
+                "schema_version": 1,
+                "startup": {"first_run_wizard": False},
+            }
+            config.path.write_text(json.dumps(payload), encoding="utf-8")
+            fresh = Config(config.path)
+            self.assertTrue(fresh.get("wizard.done"))
+            self.assertNotIn(
+                "first_run_wizard", fresh.data.get("startup", {})
+            )
+
+    def test_current_schema_is_not_touched(self):
+        with TempConfig() as config:
+            payload = {"schema_version": 2, "pointer": {"hand": "left"}}
+            config.path.write_text(json.dumps(payload), encoding="utf-8")
+            fresh = Config(config.path)
+            self.assertEqual(fresh.migrated, [])
+            self.assertEqual(fresh.get("pointer.hand"), "left")
 
 
 class ProfileTests(unittest.TestCase):

@@ -6,7 +6,32 @@ from pathlib import Path
 
 from .paths import data_dir
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# §13.1 lists config migration as a unit-tested layer. Every rename the
+# project has made so far is recorded here, keyed by the schema version the
+# file was written at, so an old config.json (or one synced from a classroom
+# machine) is carried forward instead of silently falling back to defaults.
+# ``(old, new)`` moves a value when the destination is still unset; ``None``
+# drops a key that no longer means anything.
+RENAMES = {
+    1: (
+        ("startup.silent", None),
+        ("startup.first_run_wizard", "wizard.done"),
+        ("update.channel", None),
+        ("update.require_signature", None),
+        ("overlay.large_cursor", "overlay.big_cursor"),
+        ("overlay.presentation_safe_zone", "overlay.presentation"),
+        ("recording.manual", None),
+        ("recording.prefer_4k", "camera.prefer_4k"),
+        ("performance.low_power_fps", None),
+        ("logging.level", None),
+    ),
+}
+
+# `startup.first_run_wizard` meant "show the wizard", `wizard.done` means the
+# opposite, so that one value has to be flipped rather than copied.
+INVERTED = {("startup.first_run_wizard", "wizard.done")}
 
 DEFAULTS = {
     "schema_version": SCHEMA_VERSION,
@@ -147,12 +172,67 @@ DEFAULTS = {
 }
 
 
+def _pop_dotted(node: dict, dotted: str):
+    parts = dotted.split(".")
+    current = node
+    for part in parts[:-1]:
+        child = current.get(part)
+        if not isinstance(child, dict):
+            return None, False
+        current = child
+    if parts[-1] in current:
+        return current.pop(parts[-1]), True
+    return None, False
+
+
+def _has_dotted(node: dict, dotted: str) -> bool:
+    current = node
+    for part in dotted.split("."):
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    return True
+
+
+def _set_dotted(node: dict, dotted: str, value) -> None:
+    parts = dotted.split(".")
+    current = node
+    for part in parts[:-1]:
+        child = current.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            current[part] = child
+        current = child
+    current[parts[-1]] = value
+
+
+def migrate(raw: dict, version: int) -> list:
+    """Carry an older settings file forward in place (§12.5, §13.1).
+
+    Returns the list of ``(old, new)`` pairs actually applied so the caller
+    can log them; ``new`` is ``None`` for a key that was dropped.
+    """
+    applied = []
+    for step in range(max(0, version), SCHEMA_VERSION):
+        for old, new in RENAMES.get(step, ()):
+            value, found = _pop_dotted(raw, old)
+            if not found:
+                continue
+            if new is not None and not _has_dotted(raw, new):
+                if (old, new) in INVERTED:
+                    value = not bool(value)
+                _set_dotted(raw, new, value)
+            applied.append((old, new))
+    return applied
+
+
 class Config:
     def __init__(self, path: Path | None = None):
         self.path = path or (data_dir() / "config.json")
         self.data = copy.deepcopy(DEFAULTS)
         self._stamp = self._stat()
         self._watchers = []
+        self.migrated = []
         self.load()
 
     def watch(self, callback) -> None:
@@ -183,6 +263,7 @@ class Config:
             # rather than merging a shape we cannot interpret (§12.5).
             self._keep_copy()
             return
+        self.migrated = migrate(raw, version)
         self._merge(self.data, raw)
         self.data["schema_version"] = SCHEMA_VERSION
 
@@ -217,6 +298,11 @@ class Config:
         # Build the new tree off to the side and swap it in, so the
         # controller thread never sees a half-merged dict.
         merged = copy.deepcopy(self.data)
+        try:
+            version = int(raw.get("schema_version", SCHEMA_VERSION))
+        except (TypeError, ValueError):
+            version = SCHEMA_VERSION
+        self.migrated = migrate(raw, version)
         self._merge(merged, raw)
         merged["schema_version"] = SCHEMA_VERSION
         self.data = merged

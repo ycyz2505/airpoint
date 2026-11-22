@@ -124,6 +124,18 @@ def main() -> None:
     security = Security(config)
     log = make_logger("app", config)
     log(f"start {__version__}")
+    if config.migrated:
+        moved = ", ".join(
+            f"{old}->{new}" if new else f"{old} dropped"
+            for old, new in config.migrated
+        )
+        log(f"config migrated: {moved}")
+        try:
+            # Persist the upgraded shape so the next start is a no-op; the
+            # pre-migration file is kept as config.json.bak by save().
+            config.save()
+        except OSError as exc:
+            log(f"config migration not written: {exc}")
     updater.cleanup_leftovers(log)
     update_log = make_logger("update", config)
 
