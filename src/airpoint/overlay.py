@@ -15,10 +15,7 @@ def _screen_rect(config) -> tuple[int, int, int, int]:
     """The display the HUD belongs on, in virtual-desktop coordinates."""
     from . import inject
 
-    try:
-        return inject.screen_rect(config.get("pointer.screen", "auto"))
-    except Exception:
-        return 0, 0, 1920, 1080
+    return inject.screen_rect(config.get("pointer.screen", "auto"))
 
 
 def _label(text: str, command, parent, min_width: int = 0) -> tk.Button:

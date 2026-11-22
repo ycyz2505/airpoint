@@ -46,12 +46,9 @@ def _target_aspect(config) -> float:
     """Aspect of the display the mapping box is fitted to (§7.1)."""
     from . import inject
 
-    try:
-        _left, _top, width, height = inject.screen_rect(
-            config.get("pointer.screen", "auto")
-        )
-    except Exception:
-        return 16 / 9
+    _left, _top, width, height = inject.screen_rect(
+        config.get("pointer.screen", "auto")
+    )
     return width / max(1, height)
 
 
