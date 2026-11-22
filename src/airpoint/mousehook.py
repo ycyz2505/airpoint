@@ -16,9 +16,15 @@ WM_RBUTTONDOWN = 0x0204
 WM_RBUTTONUP = 0x0205
 WM_MBUTTONDOWN = 0x0207
 WM_MBUTTONUP = 0x0208
+WM_XBUTTONDOWN = 0x020B
+WM_XBUTTONUP = 0x020C
 WM_MOUSEWHEEL = 0x020A
 HC_ACTION = 0
 LLMHF_INJECTED = 0x00000001
+
+# §9.6: only the side buttons confirm, never left or right. A left click on a
+# desktop icon must not also hand the cursor back to the air pointer.
+_CONFIRM_MESSAGES = {WM_MBUTTONDOWN, WM_XBUTTONDOWN}
 
 _MOUSE_MESSAGES = {
     WM_MOUSEMOVE,
@@ -28,6 +34,8 @@ _MOUSE_MESSAGES = {
     WM_RBUTTONUP,
     WM_MBUTTONDOWN,
     WM_MBUTTONUP,
+    WM_XBUTTONDOWN,
+    WM_XBUTTONUP,
     WM_MOUSEWHEEL,
 }
 
@@ -70,6 +78,14 @@ user32.GetMessageW.restype = wintypes.BOOL
 
 
 class MousePause:
+    """§9.6: pause the air cursor while the physical mouse is in use.
+
+    The controller closes its camera while paused, so there is no live hand
+    position to test here. "Hand inside the box" is enforced by the box gate
+    in the frame loop instead: the cursor does not move while the hand is
+    outside, so resuming with the hand away from the box cannot move anything.
+    """
+
     def __init__(self, controller, log, seconds: float):
         self.controller = controller
         self.log = log
@@ -80,9 +96,11 @@ class MousePause:
 
     def trigger(self) -> None:
         with self._lock:
-            if not self.controller.active:
-                return
             if not self._paused:
+                # Only an active cursor can be taken over; once paused, the
+                # controller is inactive, so this check must come first.
+                if not self.controller.active:
+                    return
                 self._paused = True
                 self.controller.set_mouse_takeover(True)
                 self.controller.set_active(False)
@@ -103,6 +121,13 @@ class MousePause:
         self.controller.set_active(True)
         self.log("mouse resume")
 
+    def confirm(self) -> None:
+        """§9.6: a physical button while paused hands control back at once."""
+        with self._lock:
+            paused = self._paused
+        if paused:
+            self._resume()
+
     def cancel(self) -> None:
         with self._lock:
             if self._timer is not None:
@@ -113,9 +138,10 @@ class MousePause:
 
 
 class MouseHook:
-    def __init__(self, log, on_physical):
+    def __init__(self, log, on_physical, on_confirm=None):
         self.log = log
         self.on_physical = on_physical
+        self.on_confirm = on_confirm
         self._hook = None
         self._proc = HOOKPROC(self._callback)
         self._thread = threading.Thread(
@@ -136,6 +162,10 @@ class MouseHook:
                     and info.dwExtraInfo != MOUSE_MARKER
                 ):
                     self.on_physical()
+                    if w_param in _CONFIRM_MESSAGES and self.on_confirm is not None:
+                        # §9.6: a side button on the physical mouse is the
+                        # "physical confirm" that hands control back now.
+                        self.on_confirm()
             except Exception:
                 pass
         return user32.CallNextHookEx(None, n_code, w_param, l_param)

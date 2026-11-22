@@ -1642,6 +1642,86 @@ class BodyLockTests(unittest.TestCase):
         self.assertGreater(inside, 0.95)
 
 
+class MousePauseTests(unittest.TestCase):
+    def _pause(self, seconds=0.3):
+        from airpoint.mousehook import MousePause
+
+        calls = []
+
+        class FakeController:
+            active = True
+
+            def set_mouse_takeover(self, value):
+                calls.append(("takeover", value))
+
+            def set_active(self, value):
+                calls.append(("active", value))
+
+        pause = MousePause(FakeController(), lambda message: None, seconds)
+        return pause, calls
+
+    @staticmethod
+    def _wait_for(predicate, timeout=3.0):
+        import time
+
+        end = time.time() + timeout
+        while time.time() < end:
+            if predicate():
+                return True
+            time.sleep(0.02)
+        return predicate()
+
+    def test_a_mouse_move_pauses_then_resumes_after_the_timeout(self):
+        pause, calls = self._pause(0.2)
+        pause.trigger()
+        self.assertEqual(
+            calls, [("takeover", True), ("active", False)]
+        )
+        self.assertTrue(self._wait_for(lambda: len(calls) >= 4))
+        self.assertEqual(
+            calls[-2:], [("takeover", False), ("active", True)]
+        )
+
+    def test_trigger_while_paused_restarts_the_timer(self):
+        import time
+
+        pause, calls = self._pause(1.0)
+        pause.trigger()
+        time.sleep(0.6)
+        pause.trigger()
+        time.sleep(0.6)
+        # Still paused: the second move pushed the resume out.
+        self.assertNotIn(("active", True), calls)
+        self.assertTrue(self._wait_for(lambda: ("active", True) in calls))
+        self.assertEqual(calls[-1], ("active", True))
+
+    def test_a_side_button_resumes_immediately(self):
+        pause, calls = self._pause(30.0)
+        pause.trigger()
+        pause.confirm()
+        self.assertEqual(calls[-2:], [("takeover", False), ("active", True)])
+
+    def test_confirm_outside_a_pause_does_nothing(self):
+        pause, calls = self._pause(30.0)
+        pause.confirm()
+        self.assertEqual(calls, [])
+
+    def test_cancel_clears_the_takeover_flag(self):
+        pause, calls = self._pause(30.0)
+        pause.trigger()
+        pause.cancel()
+        self.assertEqual(calls[-1], ("takeover", False))
+
+    def test_side_buttons_confirm_but_left_and_right_do_not(self):
+        from airpoint import mousehook
+
+        self.assertIn(mousehook.WM_MBUTTONDOWN, mousehook._CONFIRM_MESSAGES)
+        self.assertIn(mousehook.WM_XBUTTONDOWN, mousehook._CONFIRM_MESSAGES)
+        self.assertNotIn(mousehook.WM_LBUTTONDOWN, mousehook._CONFIRM_MESSAGES)
+        self.assertNotIn(mousehook.WM_RBUTTONDOWN, mousehook._CONFIRM_MESSAGES)
+        self.assertNotIn(mousehook.WM_MOUSEMOVE, mousehook._CONFIRM_MESSAGES)
+
+
 class StatusLineTests(unittest.TestCase):
     def test_capability_strip_is_drawn(self):
         import numpy as np

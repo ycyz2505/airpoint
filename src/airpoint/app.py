@@ -576,7 +576,7 @@ def main() -> None:
         ui.post(lambda root: show_bar(root))
 
     if bool(config.get("pointer.mouse_pause", True)):
-        MouseHook(log, mouse_pause.trigger).start()
+        MouseHook(log, mouse_pause.trigger, mouse_pause.confirm).start()
 
     if bool(config.get("pointer.active_on_start", False)):
         controller.set_active(True)
