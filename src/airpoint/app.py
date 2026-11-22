@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ctypes
+import contextlib
+import io
 import os
 import sys
 import threading
@@ -60,35 +62,34 @@ def _dpi() -> None:
 def _replay_cli() -> None:
     """Analyze a recording without starting the service."""
     index = sys.argv.index("--replay")
-    rest = [item for item in sys.argv[index + 1:] if not item.startswith("-")]
-    if not rest:
-        _message("用法：OpticalInputSvc.exe --replay <录像.avi>")
+    rest = sys.argv[index + 1:]
+    if not rest or rest[0].startswith("-"):
+        _message(
+            "用法：OpticalInputSvc.exe --replay <录像.avi> "
+            "[--csv 输出.csv] [--annotate 标注.avi] [--profile 档案] "
+            "[--compare 另一档案]"
+        )
         return
 
-    from .replay import analyze
+    from .replay import main as replay_main
 
-    video = rest[0]
-    csv_path = rest[1] if len(rest) > 1 else None
+    # The packaged build has no console, so argparse's errors and the summary
+    # table are captured and shown in a dialog instead of disappearing.
+    buffer = io.StringIO()
     try:
-        summary = analyze(video, csv_path=csv_path)
+        with contextlib.redirect_stdout(buffer), \
+                contextlib.redirect_stderr(buffer):
+            replay_main([*rest, "--brief"])
+    except SystemExit as exc:
+        if int(getattr(exc, "code", 0) or 0) != 0:
+            _message(buffer.getvalue().strip() or "参数有误。")
+        return
     except Exception as exc:
         _message(f"回放失败：{exc}")
         return
-
-    text = (
-        f"帧数：{summary['frames']}（{summary['duration_s']} 秒）\n"
-        f"姿态命中：{summary['pose_hit_pct']}%\n"
-        f"手部命中：{summary['hand_hit_pct']}%\n"
-        f"手掌中位：{summary['palm_px']['median']}px\n"
-        f"档位分布：{summary['tier']}\n"
-        f"光标路径：{summary['cursor']['path_px']}px\n"
-        f"抖动：dx {summary['cursor']['dx_std']} / "
-        f"dy {summary['cursor']['dy_std']}\n"
-        f"点击：{summary['gestures']['clicks']}，"
-        f"右键：{summary['gestures']['right_clicks']}，"
-        f"拖拽：{summary['gestures']['drags']}"
-    )
-    _message(text)
+    text = buffer.getvalue().strip()
+    if text:
+        _message(text)
 
 
 def _message(text: str) -> None:
@@ -370,9 +371,14 @@ def main() -> None:
 
     def on_record() -> None:
         if controller.recording:
+            # Stopping is always allowed; §10.4 gates the start, not the end.
             controller.stop_recording()
-        else:
+            return
+
+        def start(root) -> None:
             controller.start_recording()
+
+        ui.post(lambda root: locked(root, lambda: start(root)))
 
     def on_recalibrate() -> None:
         ui.post(lambda root: locked(root, lambda: recalibrate(root)))

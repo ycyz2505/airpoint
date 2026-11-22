@@ -91,9 +91,14 @@ settings → 更新 shows the current version, the last check and a manual butto
   a stale entry never survives a moved executable.
 - Offline replay: `python -m airpoint.replay clip.avi --csv metrics.csv`
   re-runs pose, hands, pointer, gestures, and tiering over a recording and
-  reports hit rate, palm size, cursor path, and tier time, so feel can be
-  tuned without the classroom. The packaged executable does the same with
-  `OpticalInputSvc.exe --replay clip.avi`.
+  reports hit rate, palm size, cursor path, per-frame cost (mean / p95 / max)
+  and tier time, so feel can be tuned without the classroom. `--profile`
+  takes a seat profile straight from `profiles\`, `--annotate out.avi` writes
+  a copy with the skeleton, gesture and tier burned in, and
+  `--compare other.json --compare-labels 现状,新参` runs the same clip twice
+  and prints a side-by-side table for A/B tuning. The packaged executable
+  does the same with `OpticalInputSvc.exe --replay clip.avi` and shows the
+  brief summary in a dialog.
 - Handwriting mode: while the button is held the cursor is filtered harder so
   strokes drawn in the Seewo whiteboard come out as lines instead of jitter,
   and a minimum step keeps sub-pixel drift from becoming a wobbly stroke.

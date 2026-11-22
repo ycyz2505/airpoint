@@ -1302,9 +1302,175 @@ class ReplayTests(unittest.TestCase):
             self.assertTrue(summary["tier"])
             for name in summary["tier"]:
                 self.assertIn(name, ("A", "B", "C", "D", "E"))
+            self.assertIn("mean", summary["cost_ms"])
+            self.assertGreaterEqual(summary["cost_ms"]["p95"], 0.0)
             self.assertTrue(csv_path.exists())
             lines = csv_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), 21)
+
+    def _clip(self, folder):
+        import cv2
+
+        video = folder / "clip.avi"
+        writer = cv2.VideoWriter(
+            str(video), cv2.VideoWriter_fourcc(*"MJPG"), 20.0, (320, 240)
+        )
+        for index in range(20):
+            frame = cv2.UMat(240, 320, cv2.CV_8UC3).get()
+            frame[:] = (index * 8, 40, 80)
+            writer.write(frame)
+        writer.release()
+        return video
+
+    def _fake_trackers(self):
+        class FakePose:
+            ready = True
+
+            def __init__(self):
+                self.index = 0
+
+            def process(self, frame):
+                self.index += 1
+                return 0.3 + 0.01 * self.index, 0.5, 0.9
+
+            def wrist(self, hand="right"):
+                return 0.3, 0.5, 0.9
+
+            def elbow(self, hand="right"):
+                return None
+
+            def shoulder_width(self):
+                return 0.08
+
+            def draw(self, frame):
+                return None
+
+        class FakeHands:
+            ready = True
+
+            def process(self, frame, wrist, elbow, hand):
+                return {
+                    "hand": hand,
+                    "gesture": "open",
+                    "raw": "open",
+                    "pinch": False,
+                    "fist": False,
+                    "pinch_ratio": 0.9,
+                    "fist_ratio": 1.8,
+                    "palm": 0.05,
+                    "landmarks": None,
+                    "confidence": 0.9,
+                    "box": None,
+                }
+
+            def draw(self, frame, result):
+                return None
+
+            def reset(self):
+                return None
+
+        return FakePose(), FakeHands()
+
+    def test_annotated_clip_is_written(self):
+        try:
+            import cv2
+        except ImportError:
+            self.skipTest("opencv not installed")
+
+        from airpoint.replay import ReplayAnalyzer
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            video = self._clip(folder)
+            pose, hands = self._fake_trackers()
+            target = folder / "out" / "annotated.avi"
+            with TempConfig() as config:
+                analyzer = ReplayAnalyzer(
+                    config, pose=pose, hands=hands, annotate=target
+                )
+                summary = analyzer.run(video)
+
+            self.assertTrue(target.exists())
+            self.assertEqual(summary["annotate"], str(target))
+            capture = cv2.VideoCapture(str(target))
+            self.assertTrue(capture.isOpened())
+            ok, _ = capture.read()
+            capture.release()
+            self.assertTrue(ok)
+
+    def test_profile_settings_override_a_config(self):
+        from airpoint.replay import load_settings
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            profile = folder / "seat.json"
+            profile.write_text(
+                json.dumps({
+                    "name": "seat",
+                    "data": {
+                        "pointer": {"gain": 2.5, "mode": "absolute"},
+                        "gesture": {"scheme": "double"},
+                    },
+                }),
+                encoding="utf-8",
+            )
+            with TempConfig() as config:
+                config.set("pointer.smoothing", 0.5)
+                merged = load_settings(profile, config)
+                self.assertEqual(merged.get("pointer.gain"), 2.5)
+                self.assertEqual(merged.get("pointer.mode"), "absolute")
+                self.assertEqual(merged.get("gesture.scheme"), "double")
+                # Keys the profile does not mention keep their config value.
+                self.assertEqual(merged.get("pointer.smoothing"), 0.5)
+
+    def test_compare_reports_both_runs(self):
+        from airpoint.replay import compare
+
+        left = {
+            "frames": 200,
+            "pose_hit_pct": 90.0,
+            "hand_hit_pct": 80.0,
+            "palm_px": {"median": 34.0},
+            "gestures": {"clicks": 4, "right_clicks": 1, "drags": 2},
+            "cursor": {"path_px": 1200.0, "max_step_px": 30.0,
+                       "dx_std": 1.2, "dy_std": 0.8},
+            "tier": {"B": 200},
+        }
+        right = {
+            "frames": 100,
+            "pose_hit_pct": 95.0,
+            "hand_hit_pct": 85.0,
+            "palm_px": {"median": 36.0},
+            "gestures": {"clicks": 3, "right_clicks": 0, "drags": 1},
+            "cursor": {"path_px": 800.0, "max_step_px": 20.0,
+                       "dx_std": 1.0, "dy_std": 0.6},
+            "tier": {"A": 100},
+        }
+        rows = compare(left, right, ("现状", "新参"))
+        by_name = {item["metric"]: item for item in rows}
+        self.assertEqual(by_name["姿态命中%"]["现状"], 90.0)
+        self.assertEqual(by_name["姿态命中%"]["新参"], 95.0)
+        # Click rate is normalised by frame count, not left raw.
+        self.assertEqual(by_name["点击/百帧"]["现状"], 2.0)
+        self.assertEqual(by_name["点击/百帧"]["新参"], 3.0)
+
+    def test_brief_summary_is_human_readable(self):
+        from airpoint.replay import brief
+
+        text = brief({
+            "frames": 20,
+            "duration_s": 1.0,
+            "pose_hit_pct": 100.0,
+            "hand_hit_pct": 50.0,
+            "palm_px": {"median": 30.0},
+            "tier": {"B": 20},
+            "cursor": {"path_px": 10.0, "dx_std": 0.1, "dy_std": 0.2},
+            "gestures": {"clicks": 1, "right_clicks": 0, "drags": 0},
+            "csv": "metrics.csv",
+        })
+        self.assertIn("帧数：20", text)
+        self.assertIn("B 20", text)
+        self.assertIn("metrics.csv", text)
 
 
 if __name__ == "__main__":
