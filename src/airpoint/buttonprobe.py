@@ -64,15 +64,14 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
     ]
 
 
-MOUSE_PROC = ctypes.WINFUNCTYPE(
+HOOKPROC = ctypes.WINFUNCTYPE(
     ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
 )
-KEY_PROC = ctypes.WINFUNCTYPE(
-    ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM
-)
+MOUSE_PROC = HOOKPROC
+KEY_PROC = HOOKPROC
 
 user32.SetWindowsHookExW.argtypes = [
-    ctypes.c_int, ctypes.c_void_p, wintypes.HINSTANCE, wintypes.DWORD
+    ctypes.c_int, HOOKPROC, wintypes.HINSTANCE, wintypes.DWORD
 ]
 user32.SetWindowsHookExW.restype = ctypes.c_void_p
 user32.UnhookWindowsHookEx.argtypes = [ctypes.c_void_p]
