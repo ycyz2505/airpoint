@@ -13,7 +13,8 @@ Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
 survey mode, a first-run wizard, a suggested mapping box, online
-self-calibration, and double-click detection.
+self-calibration, double-click detection, and a configurable target display
+for multi-monitor classrooms.
 
 ## Planned capabilities
 
@@ -239,7 +240,7 @@ tags.
 ## Target environment
 
 - Windows 10
-- 1080p display
+- 1080p display (a second display can be targeted with `pointer.screen`)
 - Built-in RGB camera (4K preferred)
 - Python prototype first, packaged as a single executable
 
