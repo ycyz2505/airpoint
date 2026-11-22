@@ -57,7 +57,7 @@ class ControlBar:
     """
 
     def __init__(self, root, controller, config: Config, on_settings, on_exit,
-                 on_recalibrate=None, on_stop=None):
+                 on_recalibrate=None, on_stop=None, on_board=None):
         self.root = root
         self.controller = controller
         self.config = config
@@ -65,6 +65,7 @@ class ControlBar:
         self.on_exit = on_exit
         self.on_recalibrate = on_recalibrate
         self.on_stop = on_stop
+        self.on_board = on_board
         self.win = None
         self._toggle = None
         self._status = None
@@ -127,6 +128,7 @@ class ControlBar:
         buttons.append(self._gesture_button)
         for text, command in (
             ("标定", self._recalibrate),
+            ("书写", self._board),
             ("预览", self._preview),
             ("设置", self._settings),
             ("急停", self._stop),
@@ -219,6 +221,10 @@ class ControlBar:
     def _settings(self) -> None:
         if self.on_settings is not None:
             self.on_settings()
+
+    def _board(self) -> None:
+        if self.on_board is not None:
+            self.on_board()
 
     def _recalibrate(self) -> None:
         if self.on_recalibrate is not None:

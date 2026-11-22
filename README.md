@@ -217,9 +217,9 @@ build is left untouched and the app starts from defaults.
   `暂停` / `录制` badge over the desktop, readable from the back of the room
   (**屏幕上显示映射框**), and flashes the new tier for two seconds when it
   changes (**档位变化提示**).
-- Control bar additions: **标定**, **急停**, and **退出**, so a lesson can be
-  recovered without the tray; **档位** and **手势** cycle the tier lock and the
-  click gesture in place.
+- Control bar additions: **标定**, **书写**, **急停**, and **退出**, so a lesson
+  can be recovered without the tray; **档位** and **手势** cycle the tier lock
+  and the click gesture in place.
 - Two-hand toggle: both hands raised and spread for 1.5 s shows or hides the
   control bar, since the tray is out of reach from the back of the room
   (**双手张开呼出控制条**).

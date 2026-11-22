@@ -212,6 +212,7 @@ class WritingBoard:
         _left, _top, w, h = self._rect
         src_x, src_y, side = source_rect(self._rect, self._gain())
         return grab(src_x, src_y, side, w, h)
+
     def _apply_backdrop(self, image) -> None:
         if self._canvas is None:
             return
@@ -313,13 +314,14 @@ class WritingBoard:
                     time.sleep(0.04)
                     for x, y in points[1:]:
                         inject.set_cursor(x, y)
-                        time.sleep(0.006)
+                        time.sleep(0.004)
                     inject.button("left", False)
                     time.sleep(0.06)
             finally:
                 inject.release_all()
                 if was_active:
                     controller.set_active(True)
+                self._busy = False
                 if on_done is not None:
                     try:
                         on_done(len(strokes))

@@ -368,6 +368,7 @@ def main() -> None:
                 on_settings=lambda: on_settings(),
                 on_exit=lambda: on_exit(),
                 on_recalibrate=lambda: on_recalibrate(),
+                on_board=lambda: board_from_bar(root),
             )
         bar.show()
 
@@ -584,6 +585,16 @@ def main() -> None:
             "独立书写板还没打开。\n\n在 设置 → 指针 里打开"
             "「独立书写板」，再点托盘里的「书写板…」。",
         )
+
+    def board_from_bar(root) -> None:
+        if not bool(config.get("pointer.write_board", False)):
+            show_error(
+                root,
+                "独立书写板还没打开。\n\n在 设置 → 指针 里打开"
+                "「独立书写板」，控制条上的「书写」就能开板。",
+            )
+            return
+        show_board(root)
 
     def show_board(root) -> None:
         nonlocal board
