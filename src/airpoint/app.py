@@ -377,6 +377,14 @@ def main() -> None:
         def poll() -> None:
             if controller.take_bar_request():
                 toggle_bar(root)
+            message = controller.take_notice()
+            while message:
+                if icon is not None:
+                    try:
+                        icon.notify(message, "OpticalInputSvc")
+                    except Exception as exc:
+                        log(f"notice failed: {exc}")
+                message = controller.take_notice()
             try:
                 root.after(200, poll)
             except TclError:

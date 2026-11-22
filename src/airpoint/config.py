@@ -164,7 +164,7 @@ DEFAULTS = {
         "mode": "auto",
         "cpu_limit_pct": 20,
         "rss_limit_mb": 600,
-        "recover_seconds": 20,
+        "recover_seconds": 10,
     },
     "logging": {
         "max_mb": 0.5,

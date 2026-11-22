@@ -908,13 +908,59 @@ class GovernorTests(unittest.TestCase):
             governor._last_sample = 0.0
             seen = []
             now = 100.0
-            for _ in range(10):
-                now += 3.0
+            for _ in range(60):
+                now += 1.0
                 seen.append(governor.update(now))
-            self.assertEqual(seen[:6], [1, 2, 3, 4, 5, 5])
+            self.assertEqual(seen[0], 0)
+            # §5.6: one rung per 5 s window, and never past L5.
+            self.assertEqual(seen[-1], 5)
             self.assertEqual(governor.name, "L5 暂停")
             self.assertFalse(governor.hands_allowed())
             self.assertEqual(governor.frame_divisor(), 3)
+            # A single spike must not cost a rung.
+            self.assertEqual(seen[:4], [0, 0, 0, 0])
+            steps = [seen[i] for i in range(1, len(seen)) if seen[i] != seen[i - 1]]
+            self.assertEqual(steps, [1, 2, 3, 4, 5])
+
+    def test_a_short_spike_does_not_change_the_level(self):
+        from airpoint.performance import Governor
+
+        with TempConfig() as config:
+            config.set("performance.cpu_limit_pct", 20)
+            config.set("performance.rss_limit_mb", 600)
+            governor = Governor(config, lambda message: None)
+            governor._last_sample = 0.0
+
+            # Two hot seconds, then ten cool ones: the 5 s window average and
+            # the 5 s hold both stay clear, so the ladder must not move.
+            script = [90.0, 90.0] + [5.0] * 10
+
+            def fake_sample(now, script=script):
+                index = min(len(script) - 1, int(now - 100.0))
+                governor.cpu = script[index]
+                governor.rss_mb = 200.0
+
+            governor._sample = fake_sample
+            levels = [governor.update(100.0 + step) for step in range(12)]
+            self.assertEqual(levels, [0] * len(levels))
+
+    def test_a_sustained_overload_costs_one_rung_per_window(self):
+        from airpoint.performance import Governor
+
+        with TempConfig() as config:
+            config.set("performance.cpu_limit_pct", 20)
+            governor = Governor(config, lambda message: None)
+            governor._last_sample = 0.0
+
+            def fake_sample(now):
+                governor.cpu = 90.0
+                governor.rss_mb = 200.0
+
+            governor._sample = fake_sample
+            levels = [governor.update(100.0 + step) for step in range(12)]
+            self.assertEqual(levels[0], 0)
+            self.assertEqual(levels[5], 1)
+            self.assertEqual(levels[11], 2)
 
     def test_low_mode_locks_the_wrist_only_rung(self):
         from airpoint.performance import Governor
@@ -1621,6 +1667,24 @@ class StatusLineTests(unittest.TestCase):
         end = controller._blend(900.0, 600.0, 10.2)
         self.assertEqual(end, (900.0, 600.0))
         self.assertIsNone(controller._blend_from)
+
+    def test_notices_queue_for_the_tray(self):
+        import threading
+
+        from airpoint.controller import Controller
+
+        controller = Controller.__new__(Controller)
+        controller._lock = threading.Lock()
+        controller._notices = []
+        self.assertIsNone(controller.take_notice())
+        controller.notice("性能不足，已暂停")
+        controller.notice("second")
+        self.assertEqual(controller.take_notice(), "性能不足，已暂停")
+        self.assertEqual(controller.take_notice(), "second")
+        self.assertIsNone(controller.take_notice())
+        for index in range(10):
+            controller.notice(str(index))
+        self.assertEqual(len(controller._notices), 4)
 
     def test_blend_is_a_no_op_without_a_tier_change(self):
         from airpoint.controller import Controller

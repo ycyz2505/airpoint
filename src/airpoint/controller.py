@@ -70,6 +70,7 @@ class Controller:
         self._writing = False
         self._two_hand = TwoHandOpen(config)
         self._bar_request = 0
+        self._notices = []
         self._inject_blocked = False
         self._blocked_log = 0.0
         self._mouse_takeover = False
@@ -188,6 +189,16 @@ class Controller:
                 return False
             self._bar_request = 0
             return True
+
+    def notice(self, text: str) -> None:
+        """Queue one tray balloon for the UI thread to show (§5.6, §10.4)."""
+        with self._lock:
+            self._notices.append(text)
+            del self._notices[:-4]
+
+    def take_notice(self) -> str | None:
+        with self._lock:
+            return self._notices.pop(0) if self._notices else None
 
     def set_active(self, active: bool) -> None:
         if active:
@@ -524,6 +535,7 @@ class Controller:
                 if not self._paused_notice:
                     self._paused_notice = True
                     self.log("perf paused: resource limit")
+                    self.notice("性能不足，已暂停")
                 inject.release_all()
                 self._active.clear()
                 self._writing = False

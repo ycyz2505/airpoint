@@ -60,7 +60,10 @@ build is left untouched and the app starts from defaults.
   crop is capped at 640 px a side, since the model works at 224 internally and
   a 4K crop would only waste decode time. When the performance governor reaches
   L1 the device is reopened at 1920 wide, because resizing after the read still
-  pays for 4K decode; it returns to 4K at L0 unless it has tripped twice.
+  pays for 4K decode; it returns to 4K at L0 unless it has tripped twice. The
+  governor samples once a second, acts only after a condition has held for a
+  full 5 s window, and never moves two rungs inside one window; L5 pauses the
+  service and raises a tray balloon.
 - MediaPipe Pose wrist tracking; right or left hand.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
