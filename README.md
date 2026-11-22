@@ -34,11 +34,16 @@ downloads the new executable through a list of GitHub mirrors:
 3. `https://ghproxy.net/`
 4. direct GitHub
 
-The download is checked against the SHA-256 and size in the manifest, then the
-app restarts itself to apply it. A failed start rolls back to the previous
-build. `update.apply_when` chooses between installing at startup, staging until
-the next start, or only on request. Set `OPTICALINPUT_NO_UPDATE=1` to disable
-automatic updates.
+The download goes through WinHTTP first (system proxy, cross-domain
+redirects) and falls back to `urllib` with the registry's proxy settings. It is
+streamed to disk, checked against the SHA-256 and size in the manifest, then
+the app restarts itself to apply it. A failed start rolls back to the previous
+build; the previous `config.json` is kept as `config.json.bak` on every save.
+`update.apply_when` chooses between installing at startup, staging until
+the next start, or only on request. A read-only install folder disables the
+updater instead of failing every check. Set `OPTICALINPUT_NO_UPDATE=1` to
+disable automatic updates. Update traffic is logged to `logs\update.log`, and
+settings → 更新 shows the current version, the last check and a manual button.
 
 ## Current build
 

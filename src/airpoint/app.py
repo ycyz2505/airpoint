@@ -124,9 +124,10 @@ def main() -> None:
     log = make_logger("app", config)
     log(f"start {__version__}")
     updater.cleanup_leftovers(log)
+    update_log = make_logger("update", config)
 
     if str(config.get("update.apply_when", "startup")) != "manual":
-        updater.apply_staged(log)
+        updater.apply_staged(update_log)
 
     if getattr(sys, "frozen", False):
         want = bool(config.get("startup.auto_run", False))
@@ -362,7 +363,7 @@ def main() -> None:
     def on_check() -> None:
         threading.Thread(
             target=updater.check_and_update,
-            args=(log,),
+            args=(update_log,),
             kwargs={"on_ready": icon.stop, "delay": 0.0, "config": config},
             daemon=True,
         ).start()
@@ -442,6 +443,16 @@ def main() -> None:
     except OSError:
         pass
 
+    installed = updater.take_pending_notice()
+    if installed:
+        def notify_update() -> None:
+            try:
+                icon.notify(f"已更新到 {installed}", "OpticalInputSvc")
+            except Exception:
+                pass
+
+        threading.Timer(4.0, notify_update).start()
+
     if not security.has_password:
         ui.post(first_run)
     elif loaded_profile and profiles.seat_changed():
@@ -485,7 +496,7 @@ def main() -> None:
             if controller.recording:
                 continue
             updater.check_and_update(
-                log, on_ready=icon.stop, delay=0.0, config=config
+                update_log, on_ready=icon.stop, delay=0.0, config=config
             )
 
     if "--no-update" not in sys.argv and bool(
@@ -495,7 +506,7 @@ def main() -> None:
         if bool(config.get("update.check_on_start", True)):
             threading.Thread(
                 target=updater.check_and_update,
-                args=(log,),
+                args=(update_log,),
                 kwargs={
                     "on_ready": icon.stop,
                     "apply_now": apply_now,

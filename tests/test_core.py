@@ -858,6 +858,33 @@ class UpdateTests(unittest.TestCase):
                 else:
                     os.environ["OPTICALINPUT_HOME"] = old
 
+    def test_pending_notice_is_reported_once(self):
+        from airpoint import updater
+
+        with tempfile.TemporaryDirectory() as home:
+            old = os.environ.get("OPTICALINPUT_HOME")
+            os.environ["OPTICALINPUT_HOME"] = home
+            try:
+                updater.write_state(pending_notice="9.9.9", last_check=1.0)
+                self.assertEqual(updater.take_pending_notice(), "9.9.9")
+                # The bubble shows once; a second launch stays quiet.
+                self.assertEqual(updater.take_pending_notice(), "")
+                self.assertEqual(updater.read_state()["last_check"], 1.0)
+            finally:
+                if old is None:
+                    os.environ.pop("OPTICALINPUT_HOME", None)
+                else:
+                    os.environ["OPTICALINPUT_HOME"] = old
+
+    def test_update_is_skipped_when_not_frozen(self):
+        from airpoint import updater
+
+        seen = []
+        # A source checkout can never replace itself; check_and_update must
+        # bail before any network call.
+        updater.check_and_update(seen.append, delay=0.0)
+        self.assertIn("not frozen; update disabled", seen)
+
 
 class GovernorTests(unittest.TestCase):
     def test_ladder_is_monotonic_and_capped(self):

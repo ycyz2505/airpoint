@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -57,7 +58,234 @@ def _proxy_handler() -> urllib.request.ProxyHandler:
     return urllib.request.ProxyHandler({"http": server, "https": server})
 
 
+WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4
+WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0
+WINHTTP_FLAG_SECURE = 0x00800000
+WINHTTP_OPTION_REDIRECT_POLICY = 110
+WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS = 0
+WINHTTP_QUERY_STATUS_CODE = 19
+WINHTTP_QUERY_FLAG_NUMBER = 0x20000000
+WINHTTP_ADDREQ_FLAG_ADD = 0x20000000
+WINHTTP_HEADERS_NULL_TERMINATED = -1
+
+
+def _winhttp_stream(url: str, timeout: int, max_bytes: int, sink) -> int:
+    """GET ``url`` through WinHTTP, handing body chunks to ``sink``.
+
+    §12.7 prefers WinHTTP because it honours the system proxy and follows
+    the cross-domain redirects GitHub releases use, neither of which plain
+    urllib does reliably on a classroom machine. Chunks are streamed so a
+    200 MB exe never sits in memory.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise OSError(f"unsupported url {url}")
+    secure = parts.scheme == "https"
+    port = parts.port or (443 if secure else 80)
+    path = parts.path or "/"
+    if parts.query:
+        path += "?" + parts.query
+
+    dll = ctypes.WinDLL("winhttp", use_last_error=True)
+    dll.WinHttpOpen.restype = ctypes.c_void_p
+    dll.WinHttpOpen.argtypes = [
+        ctypes.c_wchar_p,
+        wintypes.DWORD,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        wintypes.DWORD,
+    ]
+    dll.WinHttpConnect.restype = ctypes.c_void_p
+    dll.WinHttpConnect.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        ctypes.c_ushort,
+        wintypes.DWORD,
+    ]
+    dll.WinHttpOpenRequest.restype = ctypes.c_void_p
+    dll.WinHttpOpenRequest.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_wchar_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+    ]
+    dll.WinHttpSetTimeouts.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+    ]
+    dll.WinHttpSetOption.argtypes = [
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+    ]
+    dll.WinHttpAddRequestHeaders.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    ]
+    dll.WinHttpSendRequest.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_wchar_p,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.c_size_t,
+    ]
+    dll.WinHttpReceiveResponse.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    ]
+    dll.WinHttpQueryHeaders.argtypes = [
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.c_wchar_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(wintypes.DWORD),
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    dll.WinHttpReadData.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    dll.WinHttpCloseHandle.argtypes = [ctypes.c_void_p]
+
+    def fail(what: str) -> OSError:
+        return OSError(f"winhttp {what} ({ctypes.get_last_error()})")
+
+    session = dll.WinHttpOpen(
+        USER_AGENT,
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+        None,
+        None,
+        0,
+    )
+    if not session:
+        session = dll.WinHttpOpen(
+            USER_AGENT,
+            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            None,
+            None,
+            0,
+        )
+    if not session:
+        raise fail("open")
+    request = None
+    try:
+        # Resolve/connect/send/receive, all per operation and in ms. A stall
+        # during the download is what the receive value bounds, not the
+        # whole transfer.
+        dll.WinHttpSetTimeouts(session, 5000, 5000, timeout * 1000, timeout * 1000)
+        connect = dll.WinHttpConnect(session, parts.hostname, port, 0)
+        if not connect:
+            raise fail("connect")
+        try:
+            request = dll.WinHttpOpenRequest(
+                connect,
+                "GET",
+                path,
+                None,
+                None,
+                None,
+                WINHTTP_FLAG_SECURE if secure else 0,
+            )
+            if not request:
+                raise fail("request")
+            policy = wintypes.DWORD(WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS)
+            dll.WinHttpSetOption(
+                request,
+                WINHTTP_OPTION_REDIRECT_POLICY,
+                ctypes.byref(policy),
+                ctypes.sizeof(policy),
+            )
+            headers = (
+                "Cache-Control: no-cache\r\n"
+                f"User-Agent: {USER_AGENT}\r\n"
+            )
+            if not dll.WinHttpAddRequestHeaders(
+                request,
+                headers,
+                WINHTTP_HEADERS_NULL_TERMINATED,
+                WINHTTP_ADDREQ_FLAG_ADD,
+            ):
+                raise fail("headers")
+            if not dll.WinHttpSendRequest(request, None, 0, None, 0, 0, 0):
+                raise fail("send")
+            if not dll.WinHttpReceiveResponse(request, None):
+                raise fail("receive")
+            status = wintypes.DWORD(0)
+            size = wintypes.DWORD(ctypes.sizeof(status))
+            if not dll.WinHttpQueryHeaders(
+                request,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                None,
+                ctypes.byref(status),
+                ctypes.byref(size),
+                None,
+            ):
+                raise fail("status")
+            if status.value < 200 or status.value >= 300:
+                raise OSError(f"HTTP {status.value}")
+            buffer = ctypes.create_string_buffer(65536)
+            read = wintypes.DWORD(0)
+            total = 0
+            while True:
+                if not dll.WinHttpReadData(
+                    request, buffer, len(buffer), ctypes.byref(read)
+                ):
+                    raise fail("read")
+                if read.value == 0:
+                    break
+                total += read.value
+                if total > max_bytes:
+                    raise OSError("response too large")
+                sink(buffer.raw[: read.value])
+            return total
+        finally:
+            if request:
+                dll.WinHttpCloseHandle(request)
+    finally:
+        dll.WinHttpCloseHandle(session)
+
+
+def _winhttp_fetch(url: str, timeout: int, max_bytes: int) -> bytes:
+    chunks = []
+    _winhttp_stream(url, timeout, max_bytes, chunks.append)
+    return b"".join(chunks)
+
+
+def _winhttp_to_file(
+    url: str, timeout: int, max_bytes: int, path: Path
+) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    with path.open("wb") as handle:
+
+        def sink(chunk: bytes) -> None:
+            digest.update(chunk)
+            handle.write(chunk)
+
+        total = _winhttp_stream(url, timeout, max_bytes, sink)
+    return digest.hexdigest(), total
+
+
 def _fetch(url: str, timeout: int, max_bytes: int) -> bytes:
+    try:
+        return _winhttp_fetch(url, timeout, max_bytes)
+    except Exception:
+        pass
     request = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Cache-Control": "no-cache"},
@@ -115,6 +343,10 @@ def _is_newer(remote: str, current: str) -> bool:
 def _fetch_to_file(
     url: str, timeout: int, max_bytes: int, path: Path
 ) -> tuple[str, int]:
+    try:
+        return _winhttp_to_file(url, timeout, max_bytes, path)
+    except Exception:
+        pass
     request = urllib.request.Request(
         url,
         headers={"User-Agent": USER_AGENT, "Cache-Control": "no-cache"},
@@ -231,6 +463,52 @@ def staged_path() -> Path:
     return target.with_name(target.stem + "-new.exe")
 
 
+def state_path() -> Path:
+    return updates_dir() / "update-state.json"
+
+
+def read_state() -> dict:
+    try:
+        data = json.loads(state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_state(**changes) -> None:
+    data = read_state()
+    data.update(changes)
+    try:
+        state_path().write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def take_pending_notice() -> str:
+    """Version that was just installed, reported once after the restart."""
+    data = read_state()
+    version = str(data.get("pending_notice") or "")
+    if version:
+        write_state(pending_notice="")
+    return version
+
+
+def install_writable() -> bool:
+    """§12.7: an exe in a read-only folder cannot be replaced, so don't try."""
+    if not getattr(sys, "frozen", False):
+        return False
+    folder = exe_path().parent
+    probe = folder / ".airpoint-write-test"
+    try:
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def cleanup_leftovers(log=None) -> None:
     """Drop an unverified download left behind by an interrupted update.
 
@@ -309,6 +587,13 @@ def check_and_update(
     if os.environ.get("OPTICALINPUT_NO_UPDATE"):
         log("update disabled by OPTICALINPUT_NO_UPDATE")
         return
+    if not install_writable():
+        log("install folder is read-only; update disabled")
+        write_state(
+            last_check=time.time(),
+            last_result="只读目录，已跳过更新",
+        )
+        return
     accelerators = None
     allow_downgrade = False
     if config is not None:
@@ -319,16 +604,19 @@ def check_and_update(
     if delay:
         time.sleep(delay)
     log(f"checking; current {__version__}")
+    write_state(last_check=time.time())
     try:
         manifest = _fetch_manifest(log, accelerators)
         entry = manifest["airpoint"]
         remote = str(entry.get("version") or "")
         if not remote:
             log("manifest has no version")
+            write_state(last_result="清单里没有版本号")
             return
         newer = _is_newer(remote, __version__)
         if not newer and (remote == __version__ or not allow_downgrade):
             log(f"up to date ({remote})")
+            write_state(last_result=f"已是最新（{remote}）")
             return
         target = exe_path()
         part = _download(entry, log, target, accelerators)
@@ -336,9 +624,14 @@ def check_and_update(
         part.replace(new)
         if not apply_now:
             log(f"staged {remote}; will apply on next start")
+            write_state(last_result=f"已下载 {remote}，下次启动安装")
             return
         marker = updates_dir() / f"started-{remote}.ok"
         batch = _write_batch(target, new, os.getpid(), marker)
+        write_state(
+            last_result=f"正在安装 {remote}",
+            pending_notice=remote,
+        )
         log(f"staged {remote}; restarting")
         if on_ready is not None:
             on_ready()
@@ -350,3 +643,4 @@ def check_and_update(
         _leave_cleanly()
     except Exception as exc:
         log(f"update failed: {exc}")
+        write_state(last_result=f"检查失败：{exc}")

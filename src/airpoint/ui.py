@@ -296,6 +296,8 @@ def open_settings(
         frame = ttk.Frame(notebook, padding=12)
         notebook.add(frame, text=title)
         _build_fields(frame, config, fields, bindings, controller)
+        if title == "更新":
+            _build_update_status(frame, config, version)
 
     _build_security(notebook, config, security, bindings)
     _build_about(notebook, version)
@@ -356,6 +358,49 @@ def open_settings(
 
     win.protocol("WM_DELETE_WINDOW", win.destroy)
     win.lift()
+
+
+def _build_update_status(frame, config, version: str) -> None:
+    """Current version, last check and a manual check, per §12.7."""
+    from . import updater
+
+    row = frame.grid_size()[1] + 1
+    ttk.Separator(frame, orient="horizontal").grid(
+        row=row, column=0, columnspan=2, sticky="ew", pady=(12, 8)
+    )
+    state = updater.read_state()
+    checked = state.get("last_check")
+    try:
+        stamp = time.strftime("%m-%d %H:%M", time.localtime(float(checked)))
+    except (TypeError, ValueError):
+        stamp = "从未"
+    ttk.Label(
+        frame,
+        text=f"当前版本 {version} · 上次检查 {stamp}",
+    ).grid(row=row + 1, column=0, columnspan=2, sticky="w", pady=2)
+    ttk.Label(
+        frame,
+        text=str(state.get("last_result") or "尚无更新记录"),
+        wraplength=460,
+        justify="left",
+    ).grid(row=row + 2, column=0, columnspan=2, sticky="w", pady=2)
+
+    def check_now() -> None:
+        threading.Thread(
+            target=updater.check_and_update,
+            args=(lambda text: None,),
+            kwargs={"delay": 0.0, "config": config},
+            daemon=True,
+        ).start()
+        messagebox.showinfo(
+            "OpticalInputSvc",
+            "已在后台检查；有新版会直接安装并重启。",
+            parent=frame,
+        )
+
+    ttk.Button(frame, text="立即检查", command=check_now).grid(
+        row=row + 3, column=0, sticky="w", pady=(8, 0)
+    )
 
 
 def _build_fields(frame, config, fields, bindings, controller=None) -> None:
