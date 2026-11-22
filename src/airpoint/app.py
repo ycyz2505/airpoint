@@ -549,6 +549,14 @@ def main() -> None:
         except TclError:
             pass
 
+    def on_probe() -> None:
+        ui.post(lambda root: locked(root, lambda: open_button_probe(root)))
+
+    def open_button_probe(root) -> None:
+        from .buttonprobe import open_probe
+
+        open_probe(root)
+
     def on_wizard() -> None:
         ui.post(lambda root: locked(root, lambda: open_wizard_now(root)))
 
@@ -580,6 +588,7 @@ def main() -> None:
         on_survey=on_survey,
         on_wizard=on_wizard,
         on_report=on_report,
+        on_probe=on_probe,
         describe=controller.describe,
     )
     _watch_second_launch(icon, log)

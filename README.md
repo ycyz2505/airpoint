@@ -12,9 +12,10 @@ meters away.
 Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
-survey mode, an environment self-check, a first-run wizard, a suggested and
-editable mapping box, online self-calibration, double-click detection, and a
-configurable target display for multi-monitor classrooms.
+survey mode, an environment self-check, a side-button self-check, a first-run
+wizard, a suggested and editable mapping box, online self-calibration,
+double-click detection, and a configurable target display for multi-monitor
+classrooms.
 
 ## Planned capabilities
 
@@ -163,8 +164,8 @@ build is left untouched and the app starts from defaults.
 - Survey mode: a fullscreen camera view with large statistics and a 30-second
   test that measures shoulder width, palm size, drop rate, and confidence, then
   suggests a tier (with the reason) and can lock it in one click.
-- Tray additions: **首次向导…**, **勘测模式…**, **环境自检…**, **重新标定…**, and
-  **打开数据目录**.
+- Tray additions: **首次向导…**, **勘测模式…**, **环境自检…**, **侧键自检…**,
+  **重新标定…**, and **打开数据目录**.
 - Mapping-box suggestion: the preview's **建议框** button takes the pose body
   bounding rect, pads it, and snaps it to the screen aspect, so the box can be
   set from six metres without drawing it by hand. **调整框** then makes the box
@@ -180,6 +181,12 @@ build is left untouched and the app starts from defaults.
   manual exposure takes effect, judges whether 4K is available, whether the
   frame rate is too low, and which display number to pick, shows the result in
   a window, and saves it to `reports\env-*.txt`.
+- Side-button self-check (**侧键自检…**): listens to both the mouse and keyboard
+  low-level hooks for a few presses and reports what the physical side buttons
+  actually send — a raw `XBUTTON` (usable directly), a keyboard event (the
+  mouse driver rewrote it), or nothing but the middle button — with a one-line
+  verdict on what to change. It only observes; it never moves the cursor or
+  edits settings, and unhooks when closed.
 - First-run wizard: seven steps (camera, hand visible, seat, active area,
   calibration, gestures, save) with a live camera view, a 10-second measurement
   that suggests a tier, one-click box creation, calibration, and a seat profile.

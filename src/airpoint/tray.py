@@ -54,6 +54,7 @@ def create_icon(
     on_survey=None,
     on_wizard=None,
     on_report=None,
+    on_probe=None,
     describe=None,
 ) -> pystray.Icon:
     items = []
@@ -81,6 +82,8 @@ def create_icon(
         items.append(pystray.MenuItem("勘测模式…", lambda: on_survey()))
     if on_report is not None:
         items.append(pystray.MenuItem("环境自检…", lambda: on_report()))
+    if on_probe is not None:
+        items.append(pystray.MenuItem("侧键自检…", lambda: on_probe()))
     if on_wizard is not None:
         items.append(pystray.MenuItem("首次向导…", lambda: on_wizard()))
     if on_recalibrate is not None:

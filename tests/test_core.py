@@ -966,6 +966,47 @@ class EnvReportTests(unittest.TestCase):
         self.assertIn("打不开摄像头", text)
 
 
+class ButtonProbeTests(unittest.TestCase):
+    """§14.2 #5: which button did the physical mouse actually send."""
+
+    def test_xbuttons_are_named_by_their_high_word(self):
+        from airpoint.buttonprobe import button_name
+
+        self.assertEqual(button_name(0x020B, 1 << 16), "侧键 1（后退）")
+        self.assertEqual(button_name(0x020B, 2 << 16), "侧键 2（前进）")
+        self.assertEqual(button_name(0x0207, 0), "中键")
+
+    def test_left_and_right_clicks_are_not_reported(self):
+        from airpoint.buttonprobe import button_name
+
+        self.assertIsNone(button_name(0x0201, 0))
+        self.assertIsNone(button_name(0x0204, 0))
+
+    def test_browser_keys_get_a_readable_name(self):
+        from airpoint.buttonprobe import key_name
+
+        self.assertEqual(key_name(0xA6), "浏览器后退")
+        self.assertEqual(key_name(0x41), "A")
+        self.assertIn("0x91", key_name(0x91))
+
+    def test_a_raw_side_button_says_no_driver_is_needed(self):
+        from airpoint.buttonprobe import verdict
+
+        text = verdict(["侧键 1（后退）"])
+        self.assertIn("不用装驱动", text)
+
+    def test_a_driver_mapped_button_points_at_the_driver(self):
+        from airpoint.buttonprobe import verdict
+
+        text = verdict(["键盘 浏览器后退"])
+        self.assertIn("被鼠标驱动改成了键盘事件", text)
+
+    def test_nothing_pressed_says_to_press_it(self):
+        from airpoint.buttonprobe import verdict
+
+        self.assertIn("还没按到", verdict([]))
+
+
 class TrayTitleTests(unittest.TestCase):
     def test_title_follows_state(self):
         from airpoint import tray
