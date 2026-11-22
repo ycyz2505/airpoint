@@ -116,6 +116,50 @@ class GestureTests(unittest.TestCase):
             out = engine.update("up", 10.2, (160, 100))
             self.assertTrue(out.left_up)
 
+    def test_two_quick_taps_become_one_double_click(self):
+        with TempConfig() as config:
+            config.set("gesture.double_click_ms", 350)
+            config.set("gesture.drag_threshold_px", 6)
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.00, (100, 100))
+            first = engine.update("up", 10.05, (100, 100))
+            self.assertTrue(first.left_click)
+            engine.update("down", 10.20, (102, 100))
+            second = engine.update("up", 10.25, (102, 100))
+            self.assertTrue(second.double_click)
+            self.assertFalse(second.left_click)
+
+    def test_a_slow_second_tap_is_another_single_click(self):
+        with TempConfig() as config:
+            config.set("gesture.double_click_ms", 350)
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.00, (100, 100))
+            engine.update("up", 10.05, (100, 100))
+            engine.update("down", 10.60, (100, 100))
+            second = engine.update("up", 10.65, (100, 100))
+            self.assertTrue(second.left_click)
+            self.assertFalse(second.double_click)
+
+    def test_cancel_releases_a_drag_but_not_a_tap(self):
+        with TempConfig() as config:
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100))
+            engine.update("down", 10.1, (200, 100))
+            self.assertTrue(engine.cancel().left_up)
+            self.assertEqual(engine.state, "Idle")
+            self.assertFalse(engine.cancel().left_up)
+
+    def test_hold_progress_fills_before_the_right_click(self):
+        with TempConfig() as config:
+            config.set("gesture.right_click_ms", 1000)
+            engine = GestureEngine(config, lambda message: None)
+            engine.update("down", 10.0, (100, 100))
+            self.assertAlmostEqual(engine.hold_progress(10.0), 0.0)
+            self.assertAlmostEqual(engine.hold_progress(10.5), 0.5)
+            self.assertAlmostEqual(engine.hold_progress(10.9), 0.9)
+            engine.update("down", 11.1, (100, 100))
+            self.assertEqual(engine.hold_progress(11.2), 0.0)
+
 
 class _FakePose:
     def __init__(self, left, right, shoulder=0.12, shoulder_y=0.5):
