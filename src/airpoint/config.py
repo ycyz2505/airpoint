@@ -109,6 +109,8 @@ DEFAULTS = {
         "write_mode": True,
         "write_smoothing": 0.35,
         "write_min_step_px": 1.5,
+        "write_board": False,
+        "write_board_gain": 4.0,
         "edge_scroll": True,
         "v_scroll": True,
         "box": [],

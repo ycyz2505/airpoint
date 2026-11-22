@@ -440,6 +440,8 @@ def main() -> None:
             hold_ring.stop()
         if hud is not None:
             hud.stop()
+        if board is not None:
+            board.close()
         restore_cursor()
         controller.stop()
         if icon is not None:
@@ -557,6 +559,49 @@ def main() -> None:
 
         open_probe(root)
 
+    board = None
+
+    def on_board() -> None:
+        if not bool(config.get("pointer.write_board", False)):
+            ui.post(lambda root: locked(root, lambda: open_board_tab(root)))
+            return
+        ui.post(lambda root: locked(root, lambda: show_board(root)))
+
+    def open_board_tab(root) -> None:
+        # The board is off by default, so this menu entry is also how a user
+        # finds the switch; landing them on the page beats a board that
+        # silently does nothing.
+        open_settings(
+            root,
+            config,
+            security,
+            __version__,
+            on_saved=on_saved,
+            controller=controller,
+        )
+        show_error(
+            root,
+            "独立书写板还没打开。\n\n在 设置 → 指针 里打开"
+            "「独立书写板」，再点托盘里的「书写板…」。",
+        )
+
+    def show_board(root) -> None:
+        nonlocal board
+        from .writingboard import open_board
+
+        if board is not None:
+            try:
+                board.open()
+                return
+            except Exception:
+                board = None
+        board = open_board(
+            root,
+            controller,
+            config,
+            on_done=lambda count: log(f"write board committed {count} stroke(s)"),
+        )
+
     def on_wizard() -> None:
         ui.post(lambda root: locked(root, lambda: open_wizard_now(root)))
 
@@ -589,6 +634,7 @@ def main() -> None:
         on_wizard=on_wizard,
         on_report=on_report,
         on_probe=on_probe,
+        on_board=on_board,
         describe=controller.describe,
     )
     _watch_second_launch(icon, log)

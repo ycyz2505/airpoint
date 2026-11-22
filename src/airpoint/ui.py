@@ -184,6 +184,8 @@ SECTIONS = [
             ("pointer.write_mode", "书写平滑", "bool"),
             ("pointer.write_smoothing", "书写平滑强度", "float"),
             ("pointer.write_min_step_px", "书写最小步长（px）", "float"),
+            ("pointer.write_board", "独立书写板", "bool"),
+            ("pointer.write_board_gain", "书写板放大倍数", "float"),
             ("pointer.edge_scroll", "贴边滚动", "bool"),
             ("pointer.v_scroll", "近距 V 字手势滚动", "bool"),
             ("pointer.self_calib", "点击自动校正偏移", "bool"),

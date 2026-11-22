@@ -12,10 +12,10 @@ meters away.
 Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
-survey mode, an environment self-check, a side-button self-check, a first-run
-wizard, a suggested and editable mapping box, online self-calibration,
-double-click detection, and a configurable target display for multi-monitor
-classrooms.
+survey mode, an environment self-check, a side-button self-check, a writing
+board, a first-run wizard, a suggested and editable mapping box, online
+self-calibration, double-click detection, and a configurable target display
+for multi-monitor classrooms.
 
 ## Planned capabilities
 
@@ -153,6 +153,13 @@ build is left untouched and the app starts from defaults.
 - Writing magnifier: a small always-on-top, click-through window follows the
   cursor while a button is held and shows a 2.5x (adjustable) view of the
   screen area under it, so the stroke lands where intended.
+- Writing board (**书写板…**): with **独立书写板** on, a centred, always-on-top
+  square board opens over the target display showing the region under it at
+  4x (**书写板放大倍数**). Strokes are drawn large on the board, then on
+  **提交** they are shrunk around the board's centre, resampled to 2 px steps,
+  and replayed as synthesized drags into the app that was underneath, so a
+  stroke made from six metres lands at the right size in the whiteboard.
+  **清空** and **取消** discard; Return commits and Esc closes.
 - Presentation mode: a 5 % safe band around the screen edge ignores clicks so
   the cursor cannot fire a tool by accident; the status line shows `DEMO` and
   the control bar stays hidden.
@@ -165,7 +172,7 @@ build is left untouched and the app starts from defaults.
   test that measures shoulder width, palm size, drop rate, and confidence, then
   suggests a tier (with the reason) and can lock it in one click.
 - Tray additions: **首次向导…**, **勘测模式…**, **环境自检…**, **侧键自检…**,
-  **重新标定…**, and **打开数据目录**.
+  **书写板…**, **重新标定…**, and **打开数据目录**.
 - Mapping-box suggestion: the preview's **建议框** button takes the pose body
   bounding rect, pads it, and snaps it to the screen aspect, so the box can be
   set from six metres without drawing it by hand. **调整框** then makes the box

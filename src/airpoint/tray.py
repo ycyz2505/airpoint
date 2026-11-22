@@ -55,6 +55,7 @@ def create_icon(
     on_wizard=None,
     on_report=None,
     on_probe=None,
+    on_board=None,
     describe=None,
 ) -> pystray.Icon:
     items = []
@@ -78,6 +79,8 @@ def create_icon(
             ),
         ]
     )
+    if on_board is not None:
+        items.append(pystray.MenuItem("书写板…", lambda: on_board()))
     if on_survey is not None:
         items.append(pystray.MenuItem("勘测模式…", lambda: on_survey()))
     if on_report is not None:

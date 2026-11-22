@@ -966,6 +966,62 @@ class EnvReportTests(unittest.TestCase):
         self.assertIn("打不开摄像头", text)
 
 
+class WritingBoardTests(unittest.TestCase):
+    """§10.5 v2: the board's geometry, which is the part worth testing."""
+
+    def test_board_is_a_centred_square_on_the_target_display(self):
+        from airpoint.writingboard import board_rect
+
+        left, top, side, height = board_rect(1920, 0, 1920, 1080, 0.8)
+        self.assertEqual(side, height)
+        self.assertEqual(side, 864)
+        self.assertEqual(left, 1920 + (1920 - 864) // 2)
+        self.assertEqual(top, (1080 - 864) // 2)
+
+    def test_board_stays_inside_a_secondary_display(self):
+        from airpoint.writingboard import board_rect
+
+        left, top, side, _height = board_rect(-1920, 100, 1920, 1080, 0.8)
+        self.assertGreaterEqual(left, -1920)
+        self.assertLessEqual(left + side, 0)
+        self.assertGreaterEqual(top, 100)
+
+    def test_commit_shrinks_the_stroke_around_the_board_centre(self):
+        from airpoint.writingboard import to_screen
+
+        rect = (0, 0, 800, 800)
+        points = to_screen([(400, 400), (800, 400)], rect, 4.0)
+        self.assertAlmostEqual(points[0][0], 400.0)
+        self.assertAlmostEqual(points[1][0], 500.0)
+
+    def test_source_region_is_the_shrunk_board(self):
+        from airpoint.writingboard import source_rect
+
+        x, y, side = source_rect((0, 0, 800, 800), 4.0)
+        self.assertEqual(side, 200)
+        self.assertEqual((x, y), (300, 300))
+
+    def test_resample_fills_a_fast_flick_so_the_pen_cannot_cut_corners(self):
+        from airpoint.writingboard import resample
+
+        points = resample([(0.0, 0.0), (100.0, 0.0)], 2.0)
+        self.assertEqual(len(points), 51)
+        self.assertAlmostEqual(points[-1][0], 100.0)
+
+    def test_resample_keeps_a_short_stroke_unchanged(self):
+        from airpoint.writingboard import resample
+
+        self.assertEqual(resample([(1.0, 2.0)]), [(1.0, 2.0)])
+        self.assertEqual(resample([]), [])
+
+    def test_total_length_is_the_sum_of_the_segments(self):
+        from airpoint.writingboard import total_length
+
+        self.assertAlmostEqual(
+            total_length([(0, 0), (3, 4), (3, 14)]), 15.0
+        )
+
+
 class ButtonProbeTests(unittest.TestCase):
     """§14.2 #5: which button did the physical mouse actually send."""
 
