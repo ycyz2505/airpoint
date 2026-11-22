@@ -106,6 +106,8 @@ class WritingBoard:
             return 4.0
 
     def open(self) -> None:
+        if self._busy:
+            return
         if self.win is not None:
             try:
                 self.win.deiconify()
@@ -118,6 +120,7 @@ class WritingBoard:
     def close(self) -> None:
         if self.win is None:
             return
+        self._set_board_open(False)
         try:
             self.win.destroy()
         except tk.TclError:
@@ -126,12 +129,21 @@ class WritingBoard:
         self._canvas = None
         self._photo = None
 
+    def _set_board_open(self, flag: bool) -> None:
+        try:
+            self.controller.board_open = flag
+        except Exception:
+            pass
+
     def _build(self) -> None:
         left, top, w, h = inject.screen_rect(
             self.config.get("pointer.screen", "auto")
         )
         if w <= 0 or h <= 0:
             return
+        self._busy = False
+        self._strokes = []
+        self._current = None
         win_left, win_top, side, _side = board_rect(left, top, w, h)
         self._rect = (win_left, win_top, side, side)
         # Grab the backdrop before the board covers it, or the snapshot would
@@ -146,8 +158,16 @@ class WritingBoard:
         win.attributes("-topmost", True)
         win.configure(bg="#f7f7f7")
 
+        # The canvas is the whole window, so board pixels and screen pixels
+        # are the same scale and the shrink centre is the visible centre.
+        canvas = tk.Canvas(
+            win, bg="#ffffff", highlightthickness=0, cursor="crosshair"
+        )
+        canvas.pack(fill="both", expand=True)
+        self._canvas = canvas
+
         bar = tk.Frame(win, bg="#1b1b1b", padx=10, pady=8)
-        bar.pack(fill="x")
+        bar.place(x=10, y=10)
         tk.Label(
             bar,
             text=f"书写板 · {self._gain():.1f} 倍",
@@ -157,19 +177,13 @@ class WritingBoard:
         ).pack(side="left")
         ttk.Button(
             bar, text="提交", command=self._commit
-        ).pack(side="right", padx=(8, 0), ipady=10)
+        ).pack(side="left", padx=(16, 0), ipady=10)
         ttk.Button(
             bar, text="清空", command=self._clear
-        ).pack(side="right", padx=(8, 0), ipady=10)
+        ).pack(side="left", padx=(8, 0), ipady=10)
         ttk.Button(
             bar, text="取消", command=self.close
-        ).pack(side="right", ipady=10)
-
-        canvas = tk.Canvas(
-            win, bg="#ffffff", highlightthickness=0, cursor="crosshair"
-        )
-        canvas.pack(fill="both", expand=True)
-        self._canvas = canvas
+        ).pack(side="left", padx=(8, 0), ipady=10)
 
         self._status = tk.Label(
             win,
@@ -177,11 +191,10 @@ class WritingBoard:
             font=("Microsoft YaHei UI", 12),
             bg="#e8e8e8",
             fg="#333333",
-            anchor="w",
-            padx=10,
+            padx=12,
             pady=6,
         )
-        self._status.pack(fill="x")
+        self._status.place(relx=0.5, rely=1.0, y=-12, anchor="s")
 
         canvas.bind("<Button-1>", self._down)
         canvas.bind("<B1-Motion>", self._move)
@@ -191,6 +204,7 @@ class WritingBoard:
         win.protocol("WM_DELETE_WINDOW", self.close)
 
         self._apply_backdrop(backdrop)
+        self._set_board_open(True)
 
     def _backdrop_image(self):
         from .magnifier import grab

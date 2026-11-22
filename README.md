@@ -159,7 +159,8 @@ build is left untouched and the app starts from defaults.
   **提交** they are shrunk around the board's centre, resampled to 2 px steps,
   and replayed as synthesized drags into the app that was underneath, so a
   stroke made from six metres lands at the right size in the whiteboard.
-  **清空** and **取消** discard; Return commits and Esc closes.
+  **清空** and **取消** discard; Return commits and Esc closes. The writing
+  magnifier steps aside while the board is open.
 - Presentation mode: a 5 % safe band around the screen edge ignores clicks so
   the cursor cannot fire a tool by accident; the status line shows `DEMO` and
   the control bar stays hidden.

@@ -1045,6 +1045,20 @@ class ButtonProbeTests(unittest.TestCase):
         self.assertEqual(key_name(0x41), "A")
         self.assertIn("0x91", key_name(0x91))
 
+    def test_ordinary_typing_is_not_reported(self):
+        from airpoint.buttonprobe import is_plain_typing
+
+        self.assertTrue(is_plain_typing(0x41))
+        self.assertTrue(is_plain_typing(0x20))
+        self.assertTrue(is_plain_typing(0x08))
+        self.assertFalse(is_plain_typing(0xA6))
+        self.assertFalse(is_plain_typing(0x7B))
+
+    def test_enter_is_still_reported_because_drivers_use_it(self):
+        from airpoint.buttonprobe import is_plain_typing
+
+        self.assertFalse(is_plain_typing(0x0D))
+
     def test_a_raw_side_button_says_no_driver_is_needed(self):
         from airpoint.buttonprobe import verdict
 

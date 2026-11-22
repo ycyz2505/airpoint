@@ -76,6 +76,9 @@ class Controller:
         self._cap_trips = 0
         self._last_mode = ""
         self._inside = False
+        # §10.5 v2: the writing board already shows the zoomed area, so the
+        # magnifier steps aside while it is open.
+        self.board_open = False
         self._calibrating = threading.Event()
         self._tier = TierEngine(config, log)
         self._seen = deque(maxlen=60)

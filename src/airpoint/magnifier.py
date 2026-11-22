@@ -358,7 +358,13 @@ class WritingMagnifier:
         if self._closed or self.win is None:
             return
         writing = bool(getattr(self.controller, "writing", False))
-        if not self._enabled() or not writing or not self.controller.active:
+        board = bool(getattr(self.controller, "board_open", False))
+        if (
+            not self._enabled()
+            or not writing
+            or board
+            or not self.controller.active
+        ):
             self._hide()
         else:
             self._draw()

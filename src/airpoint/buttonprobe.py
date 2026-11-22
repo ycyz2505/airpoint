@@ -111,6 +111,21 @@ def key_name(vk: int) -> str:
     return f"VK 0x{vk:02X}"
 
 
+# Drivers turn a side button into a browser/media key, never into a letter.
+# Filtering ordinary typing keeps someone's password out of the window while
+# the probe is open.
+_TYPING = set(range(0x30, 0x3A)) | set(range(0x41, 0x5B))
+_TYPING |= set(range(0x60, 0x6A))
+_TYPING |= {0x08, 0x09, 0x20, 0x10, 0x11, 0x12}
+_TYPING |= set(range(0xA0, 0xA6))
+_TYPING |= set(range(0xBA, 0xC1)) | set(range(0xDB, 0xDF))
+
+
+def is_plain_typing(vk: int) -> bool:
+    """True for keys that are almost certainly a sentence being typed."""
+    return (int(vk) & 0xFFFF) in _TYPING
+
+
 def verdict(seen) -> str:
     """Plain-language answer for §14.2 #5, from the names that fired."""
     names = list(seen)
@@ -178,7 +193,9 @@ class _Listener:
                 info = ctypes.cast(
                     l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)
                 ).contents
-                if not (info.flags & LLKHF_INJECTED):
+                if not (info.flags & LLKHF_INJECTED) and not is_plain_typing(
+                    info.vkCode
+                ):
                     self.events.put(f"键盘 {key_name(info.vkCode)}")
             except Exception:
                 pass
@@ -221,7 +238,7 @@ def open_probe(parent) -> None:
     ).pack(fill="x", padx=16, pady=(14, 2))
     tk.Label(
         win,
-        text="这个窗口只记录按键，不动光标，也不改任何设置。",
+        text="只记录侧键和热键类按键，普通打字不会显示，也不改任何设置。",
         fg="#666666",
         anchor="w",
     ).pack(fill="x", padx=16, pady=(0, 10))
