@@ -119,6 +119,7 @@ DEFAULTS = {
     "pose": {
         "model_complexity": 1,
         "min_confidence": 0.5,
+        "multi_lock": True,
     },
     "gesture": {
         "click": "auto",

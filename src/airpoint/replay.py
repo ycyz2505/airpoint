@@ -158,7 +158,8 @@ class ReplayAnalyzer:
                 small = frame
 
             wrist = self.pose.process(small)
-            seen.append(1 if wrist is not None else 0)
+            if not self.pose.ignored:
+                seen.append(1 if wrist is not None and not self.pose.stale else 0)
             drop = 1.0 - (sum(seen) / len(seen))
             shoulder = self.pose.shoulder_width()
             pose_conf = wrist[2] if wrist else 0.0

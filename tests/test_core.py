@@ -1339,6 +1339,8 @@ class ReplayTests(unittest.TestCase):
 
         class FakePose:
             ready = True
+            ignored = False
+            stale = False
 
             def __init__(self):
                 self.index = 0
@@ -1438,6 +1440,8 @@ class ReplayTests(unittest.TestCase):
     def _fake_trackers(self):
         class FakePose:
             ready = True
+            ignored = False
+            stale = False
 
             def __init__(self):
                 self.index = 0
@@ -1584,6 +1588,58 @@ class ReplayTests(unittest.TestCase):
         self.assertIn("帧数：20", text)
         self.assertIn("B 20", text)
         self.assertIn("metrics.csv", text)
+
+
+class BodyLockTests(unittest.TestCase):
+    def test_first_body_is_accepted_and_kept_while_it_moves_a_little(self):
+        from airpoint.pose import BodyLock
+
+        lock = BodyLock()
+        self.assertTrue(lock.update((0.5, 0.5), (0.5, 0.5), 100.0))
+        self.assertTrue(lock.update((0.52, 0.51), (0.52, 0.51), 100.1))
+        self.assertTrue(lock.update((0.48, 0.49), (0.48, 0.49), 100.2))
+
+    def test_a_second_body_is_ignored_until_the_hold_elapses(self):
+        from airpoint.pose import BodyLock
+
+        lock = BodyLock()
+        lock.update((0.2, 0.5), (0.2, 0.5), 100.0)
+        # Somebody else appears on the far side: ignored, frame after frame.
+        for step in range(19):
+            self.assertFalse(lock.update((0.8, 0.5), (0.8, 0.5), 100.1 + step * 0.1))
+        # Still short of the 2 s hold.
+        self.assertFalse(lock.update((0.8, 0.5), (0.8, 0.5), 101.95))
+        # Past the hold and well clear of the locked score: the lock moves.
+        self.assertTrue(lock.update((0.8, 0.5), (0.8, 0.5), 102.2))
+
+    def test_the_locked_body_keeps_winning_when_it_is_in_the_box(self):
+        from airpoint.pose import BodyLock
+
+        box = [0.0, 0.0, 0.6, 1.0]
+        lock = BodyLock()
+        lock.update((0.5, 0.5), (0.5, 0.5), 100.0, box)
+        # The intruder stands still for far longer than the hold, but outside
+        # the mapping box and away from the cursor, so the locked body wins.
+        for step in range(1, 60):
+            self.assertFalse(
+                lock.update((0.9, 0.5), (0.9, 0.5), 100.0 + step * 0.1, box)
+            )
+
+    def test_an_empty_frame_keeps_the_anchor_for_a_short_gap(self):
+        from airpoint.pose import BodyLock
+
+        lock = BodyLock()
+        lock.update((0.5, 0.5), (0.5, 0.5), 100.0)
+        self.assertEqual(lock.anchor, (0.5, 0.5))
+
+    def test_score_rewards_box_and_proximity(self):
+        from airpoint.pose import BodyLock
+
+        box = [0.2, 0.2, 0.6, 0.8]
+        inside = BodyLock.score((0.4, 0.5), (0.42, 0.5), box, 100.0, 100.0)
+        outside = BodyLock.score((0.9, 0.5), (0.42, 0.5), box, 100.0, 100.0)
+        self.assertGreater(inside, outside)
+        self.assertGreater(inside, 0.95)
 
 
 class StatusLineTests(unittest.TestCase):

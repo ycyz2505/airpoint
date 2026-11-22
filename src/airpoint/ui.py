@@ -203,6 +203,7 @@ SECTIONS = [
         [
             ("pose.model_complexity", "姿态模型", "choice", ["0", "1", "2"]),
             ("pose.min_confidence", "姿态置信度", "float"),
+            ("pose.multi_lock", "多人锁定（只跟一个人）", "bool"),
             ("hands.model_complexity", "手部模型", "choice", ["0", "1"]),
             ("hands.min_confidence", "手部置信度", "float"),
         ],

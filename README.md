@@ -64,7 +64,12 @@ build is left untouched and the app starts from defaults.
   governor samples once a second, acts only after a condition has held for a
   full 5 s window, and never moves two rungs inside one window; L5 pauses the
   service and raises a tray balloon.
-- MediaPipe Pose wrist tracking; right or left hand.
+- MediaPipe Pose wrist tracking; right or left hand. A second person walking
+  into frame does not steal the cursor: the body accepted first is held, and a
+  different body is ignored until it has stayed put for 2 seconds and scores
+  higher on box position, recent activity and distance from the wrist
+  (**多人锁定**, on by default). A short loss of the body reuses the last
+  result for 1 second, marked stale.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
   `Ctrl+Alt+Shift+F8` control bar, `F12` emergency stop.

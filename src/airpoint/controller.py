@@ -633,7 +633,13 @@ class Controller:
             self._proc_ms = self._proc_ms * 0.9 + (now - frame_time) * 100.0
             calibrating = self._calibrating.is_set()
 
-            self._seen.append(1 if wrist is not None else 0)
+            # §6.2: a held-over result keeps the cursor alive for a second, but
+            # it is not a fresh detection, so the drop rate must not count it.
+            # A frame showing somebody else is not the user's miss either.
+            if not pose.ignored:
+                self._seen.append(
+                    1 if wrist is not None and not pose.stale else 0
+                )
             drop = 1.0 - (sum(self._seen) / len(self._seen))
             shoulder = pose.shoulder_width()
             pose_conf = wrist[2] if wrist else 0.0
