@@ -899,6 +899,73 @@ class LoggingTests(unittest.TestCase):
             self.assertGreater((folder / "unit.1.log").stat().st_size, 0)
 
 
+class EnvReportTests(unittest.TestCase):
+    """§14.2: the classroom questions that can be answered by a probe."""
+
+    def _report(self, displays, camera):
+        from airpoint.envreport import build_report
+
+        with TempConfig() as config:
+            return build_report(displays, camera, config, "9.9.9")
+
+    def test_report_lists_every_display_with_its_scaling(self):
+        text = self._report(
+            [
+                {
+                    "index": 1, "name": "\\\\.\\DISPLAY1", "left": 0, "top": 0,
+                    "width": 1920, "height": 1080, "primary": True,
+                    "dpi": 144, "scale": 1.5,
+                },
+                {
+                    "index": 2, "name": "\\\\.\\DISPLAY2", "left": 1920,
+                    "top": 0, "width": 2560, "height": 1440,
+                    "primary": False, "dpi": 96, "scale": 1.0,
+                },
+            ],
+            [],
+        )
+        self.assertIn("1920x1080", text)
+        self.assertIn("2560x1440", text)
+        self.assertIn("150%", text)
+        self.assertIn("多屏：2 个", text)
+
+    def test_report_states_whether_4k_actually_arrived(self):
+        text = self._report(
+            [],
+            [
+                {
+                    "device": 0, "asked": (3840, 2160), "got": (1920, 1080),
+                    "fps": 30.0, "frame": True,
+                },
+            ],
+        )
+        self.assertIn("请求 3840x2160 → 实际 1920x1080", text)
+        self.assertIn("4K：不可用", text)
+
+    def test_report_flags_a_slow_camera(self):
+        text = self._report(
+            [],
+            [
+                {
+                    "device": 0, "asked": (1920, 1080), "got": (1920, 1080),
+                    "fps": 12.0, "frame": True,
+                },
+            ],
+        )
+        self.assertIn("帧率不足", text)
+
+    def test_report_notes_unavailable_manual_exposure(self):
+        text = self._report(
+            [],
+            [{"device": 0, "exposure_manual": False, "exposure": -6.0}],
+        )
+        self.assertIn("只能靠自动曝光", text)
+
+    def test_report_says_so_when_no_camera_answers(self):
+        text = self._report([], [])
+        self.assertIn("打不开摄像头", text)
+
+
 class TrayTitleTests(unittest.TestCase):
     def test_title_follows_state(self):
         from airpoint import tray

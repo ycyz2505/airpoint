@@ -493,6 +493,62 @@ def main() -> None:
 
         open_survey(root, controller.preview, controller, config)
 
+    def on_report() -> None:
+        ui.post(lambda root: locked(root, lambda: run_env_report(root)))
+
+    def run_env_report(root) -> None:
+        """§14.2: answer the classroom questions that need no eyes on screen."""
+        from .envreport import (
+            build_report, camera_probe, describe_displays, write_report,
+        )
+
+        def work() -> None:
+            # Opening the camera takes a second or two, and it is exclusive,
+            # so the probe runs off the UI thread with the controller paused.
+            displays = describe_displays()
+            was_active = controller.active
+            if was_active:
+                controller.set_active(False)
+                time.sleep(0.6)
+            try:
+                camera = camera_probe(config, log)
+            finally:
+                if was_active:
+                    controller.set_active(True)
+            text = build_report(displays, camera, config, __version__)
+            try:
+                path = write_report(displays, camera, config, __version__)
+            except OSError as exc:
+                ui.post(
+                    lambda root, msg=str(exc): show_error(
+                        root, f"报告写入失败：{msg}"
+                    )
+                )
+                return
+            ui.post(lambda root: show_env_report(root, text, path))
+
+        threading.Thread(
+            target=work, daemon=True, name="airpoint-env-report"
+        ).start()
+
+    def show_env_report(root, text: str, path) -> None:
+        try:
+            import tkinter as tk
+            from tkinter import messagebox
+
+            box = tk.Toplevel(root)
+            box.title("OpticalInputSvc 环境自检")
+            box.geometry("640x480")
+            view = tk.Text(box, wrap="word", font=("Consolas", 10))
+            view.pack(fill="both", expand=True, padx=8, pady=8)
+            view.insert("1.0", text)
+            view.configure(state="disabled")
+            messagebox.showinfo(
+                "OpticalInputSvc", f"报告已保存到\n{path}", parent=box
+            )
+        except TclError:
+            pass
+
     def on_wizard() -> None:
         ui.post(lambda root: locked(root, lambda: open_wizard_now(root)))
 
@@ -523,6 +579,7 @@ def main() -> None:
         on_data_dir=on_data_dir,
         on_survey=on_survey,
         on_wizard=on_wizard,
+        on_report=on_report,
         describe=controller.describe,
     )
     _watch_second_launch(icon, log)
