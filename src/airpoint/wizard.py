@@ -27,6 +27,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
     from PIL import Image, ImageTk
 
     from .calibrate import run_calibration
+    from .preview import _target_aspect
     from .profiles import ProfileStore, suggest_name
 
     existing = getattr(root, "_wizard_window", None)
@@ -200,9 +201,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
         width = float(stats.get("width", 0) or 0)
         height = float(stats.get("height", 0) or 0)
         frame_aspect = width / height if width > 0 and height > 0 else 16 / 9
-        screen_aspect = win.winfo_screenwidth() / max(
-            1, win.winfo_screenheight()
-        )
+        screen_aspect = _target_aspect(config)
         box = suggest_box(
             [(body_rect[0], body_rect[1]), (body_rect[2], body_rect[3])],
             frame_aspect=frame_aspect,

@@ -42,6 +42,19 @@ class PreviewBus:
             return self._frame, dict(self._stats)
 
 
+def _target_aspect(config) -> float:
+    """Aspect of the display the mapping box is fitted to (§7.1)."""
+    from . import inject
+
+    try:
+        _left, _top, width, height = inject.screen_rect(
+            config.get("pointer.screen", "auto")
+        )
+    except Exception:
+        return 16 / 9
+    return width / max(1, height)
+
+
 def open_preview(root, bus: PreviewBus, controller, config) -> None:
     existing = getattr(root, "_preview_window", None)
     if existing is not None:
@@ -293,9 +306,7 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
         width = float(stats.get("width", 0) or 0)
         height = float(stats.get("height", 0) or 0)
         frame_aspect = width / height if width > 0 and height > 0 else 16 / 9
-        screen_aspect = win.winfo_screenwidth() / max(
-            1, win.winfo_screenheight()
-        )
+        screen_aspect = _target_aspect(config)
         box = suggest_box(
             [(body[0], body[1]), (body[2], body[3])],
             frame_aspect=frame_aspect,
