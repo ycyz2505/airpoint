@@ -107,6 +107,7 @@ class ReplayAnalyzer:
             source_fps = 30.0
 
         moving_hand, scheme, click_name, mode, box = self._resolved()
+        click_hand = "left" if moving_hand == "right" else "right"
         screen_w, screen_h = self._screen()
         zone = _tracking_zone(box) if box else None
 
@@ -209,6 +210,24 @@ class ReplayAnalyzer:
                         last_palm_px = palm_px_1080(float(result["palm"]))
                         palm_values.append(last_palm_px)
 
+            # §7.7: in the two-hand scheme the click comes from the other
+            # hand, so replay has to look at it too or every far-tier
+            # recording reports zero clicks.
+            click_result = None
+            if scheme == "double":
+                click_wrist = self.pose.wrist(click_hand)
+                if click_wrist is not None and zone is not None:
+                    if not (
+                        zone[0] <= click_wrist[0] <= zone[2]
+                        and zone[1] <= click_wrist[1] <= zone[3]
+                    ):
+                        click_wrist = None
+                if click_wrist is not None:
+                    click_result = self.hands.process(
+                        frame, click_wrist, self.pose.elbow(click_hand),
+                        click_hand, bounds=zone,
+                    )
+
             point = None
             if wrist is not None:
                 point = (wrist[0], wrist[1])
@@ -261,10 +280,15 @@ class ReplayAnalyzer:
             inside_prev = inside
 
             kind = "none"
-            if inside and result is not None:
+            if scheme == "double":
+                if click_result is not None:
+                    kind = (
+                        "down"
+                        if click_result["gesture"] == click_name
+                        else "up"
+                    )
+            elif inside and result is not None:
                 kind = "down" if result["gesture"] == click_name else "up"
-            if scheme != "single":
-                kind = "none"
             out = gestures.update(kind, now, (int(cursor[0]), int(cursor[1])))
             if out.left_click:
                 clicks += 1

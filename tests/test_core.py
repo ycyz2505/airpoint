@@ -723,6 +723,17 @@ class MultiMonitorTests(unittest.TestCase):
             (1970, 50),
         )
 
+    def test_calibrated_mapping_is_clamped_to_the_display(self):
+        from airpoint.pointer import map_point
+
+        # A homography that maps the box centre well outside the display.
+        h = [4000.0, 0.0, 0.0, 0.0, 4000.0, 0.0, 0.0, 0.0, 1.0]
+        box = [0.0, 0.0, 1.0, 1.0]
+        self.assertEqual(
+            map_point(0.5, 0.5, box, 1920, 1080, h, origin=(1920, 0)),
+            (1920 + 1920, 1080),
+        )
+
     def test_clamp_to_screen_uses_the_display_rect(self):
         from airpoint.pointer import clamp_to_screen
 

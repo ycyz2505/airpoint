@@ -182,6 +182,10 @@ def map_point(x, y, box, screen_w, screen_h, calibration=None,
             return None
         u = (h[0] * x + h[1] * y + h[2]) / denominator
         v = (h[3] * x + h[4] * y + h[5]) / denominator
+        # A hand at the box edge can fit slightly outside the display; without
+        # this the cursor lands on the neighbouring monitor.
+        u = max(0.0, min(float(screen_w), u))
+        v = max(0.0, min(float(screen_h), v))
         return u + float(origin[0]), v + float(origin[1])
 
     u = (x - x0) / (x1 - x0)

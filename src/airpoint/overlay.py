@@ -384,6 +384,7 @@ class ScreenHud:
         self._tier_text = ""
         self._tier_until = 0.0
         self._shown = False
+        self._rect = None
 
     def _build(self) -> None:
         from .magnifier import _click_through
@@ -399,6 +400,7 @@ class ScreenHud:
             pass
         screen_left, screen_top, screen_w, screen_h = _screen_rect(self.config)
         win.geometry(f"{screen_w}x{screen_h}+{screen_left}+{screen_top}")
+        self._rect = (screen_left, screen_top, screen_w, screen_h)
         canvas = tk.Canvas(
             win, width=screen_w, height=screen_h, bg=self.KEY,
             highlightthickness=0, bd=0,
@@ -420,6 +422,17 @@ class ScreenHud:
         _click_through(win)
         win.withdraw()
 
+    def _apply_rect(self, rect) -> None:
+        """Move and resize the HUD onto the currently configured display."""
+        left, top, w, h = rect
+        self._rect = (left, top, w, h)
+        try:
+            self.win.geometry(f"{w}x{h}+{left}+{top}")
+            self._canvas.configure(width=w, height=h)
+            self._canvas.coords(self._tier, w - 24, 24)
+        except tk.TclError:
+            pass
+
     def refresh(self) -> None:
         if self.win is None:
             self._build()
@@ -429,6 +442,12 @@ class ScreenHud:
             screen_left, screen_top, screen_w, screen_h = _screen_rect(
                 self.config
             )
+            rect = (screen_left, screen_top, screen_w, screen_h)
+            if rect != self._rect:
+                # §7.1: the target display can be changed live; the overlay
+                # must follow it instead of drawing new pixels in the old
+                # window.
+                self._apply_rect(rect)
             box = self.config.get("pointer.box") or []
             draw_box = bool(self.config.get("overlay.box", False)) and len(box) == 4
             if draw_box:

@@ -959,6 +959,11 @@ class Controller:
                         if not frozen:
                             cx, cy = self._selfcal.apply(target)
                             cx, cy = self._blend(cx, cy, now)
+                            # The learned offset can push an edge point onto
+                            # the neighbouring display; keep it on this one.
+                            cx, cy = clamp_to_screen(
+                                cx, cy, screen_w, screen_h, origin
+                            )
                             if writing:
                                 cx, cy = self._stroke.update(cx, cy, True)
                             else:
