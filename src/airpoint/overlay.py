@@ -11,6 +11,16 @@ from .config import Config
 BAR_FONT = ("Microsoft YaHei UI", 14)
 
 
+def _screen_rect(config) -> tuple[int, int, int, int]:
+    """The display the HUD belongs on, in virtual-desktop coordinates."""
+    from . import inject
+
+    try:
+        return inject.screen_rect(config.get("pointer.screen", "auto"))
+    except Exception:
+        return 0, 0, 1920, 1080
+
+
 def _label(text: str, command, parent, min_width: int = 0) -> tk.Button:
     """A flat bar button, padded out to at least ``min_width`` pixels.
 
@@ -130,8 +140,7 @@ class ControlBar:
             buttons.append(button)
 
         win.update_idletasks()
-        screen_w = win.winfo_screenwidth()
-        screen_h = win.winfo_screenheight()
+        screen_left, screen_top, screen_w, screen_h = _screen_rect(self.config)
         overflow = win.winfo_reqwidth() - (screen_w - 16)
         if overflow > 0:
             trim = overflow // (2 * len(buttons)) + 1
@@ -142,8 +151,8 @@ class ControlBar:
         width = win.winfo_reqwidth()
         height = win.winfo_reqheight()
         win.geometry(
-            f"+{max(0, (screen_w - width) // 2)}"
-            f"+{max(0, screen_h - height - 24)}"
+            f"+{screen_left + max(0, (screen_w - width) // 2)}"
+            f"+{screen_top + max(0, screen_h - height - 24)}"
         )
 
         win.protocol("WM_DELETE_WINDOW", self.hide)
@@ -385,9 +394,8 @@ class ScreenHud:
             win.attributes("-transparentcolor", self.KEY)
         except tk.TclError:
             pass
-        screen_w = win.winfo_screenwidth()
-        screen_h = win.winfo_screenheight()
-        win.geometry(f"{screen_w}x{screen_h}+0+0")
+        screen_left, screen_top, screen_w, screen_h = _screen_rect(self.config)
+        win.geometry(f"{screen_w}x{screen_h}+{screen_left}+{screen_top}")
         canvas = tk.Canvas(
             win, width=screen_w, height=screen_h, bg=self.KEY,
             highlightthickness=0, bd=0,
@@ -415,8 +423,9 @@ class ScreenHud:
         if self.win is None:
             return
         try:
-            screen_w = self.win.winfo_screenwidth()
-            screen_h = self.win.winfo_screenheight()
+            screen_left, screen_top, screen_w, screen_h = _screen_rect(
+                self.config
+            )
             box = self.config.get("pointer.box") or []
             draw_box = bool(self.config.get("overlay.box", False)) and len(box) == 4
             if draw_box:

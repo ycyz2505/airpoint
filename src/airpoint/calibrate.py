@@ -43,10 +43,22 @@ def _fit_homography(src, dst):
     return trimmed if trimmed is not None else matrix
 
 
-def run_calibration(parent, bus, controller, config, screen_w, screen_h) -> None:
+def run_calibration(parent, bus, controller, config) -> None:
+    """Full-screen nine-point calibration on the configured target display.
+
+    The homography is fitted in the display's own pixel space (0..w, 0..h);
+    ``pointer.map_point`` adds the display origin afterwards, so a second
+    monitor is calibrated with the same code as the primary.
+    """
+    from . import inject
+
+    left, top, screen_w, screen_h = inject.screen_rect(
+        config.get("pointer.screen", "auto")
+    )
+
     win = tk.Toplevel(parent)
     win.overrideredirect(True)
-    win.geometry(f"{screen_w}x{screen_h}+0+0")
+    win.geometry(f"{screen_w}x{screen_h}+{left}+{top}")
     win.attributes("-topmost", True)
     win.configure(bg="#101010")
     win.focus_force()

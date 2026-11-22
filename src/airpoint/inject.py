@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import ctypes
+import time
 from ctypes import wintypes
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -12,6 +13,10 @@ user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
 user32.GetCursorPos.restype = ctypes.c_bool
 user32.GetSystemMetrics.argtypes = [ctypes.c_int]
 user32.GetSystemMetrics.restype = ctypes.c_int
+
+SM_CXSCREEN = 0
+SM_CYSCREEN = 1
+MONITORINFOF_PRIMARY = 1
 
 INPUT_MOUSE = 0
 MOUSE_MARKER = 0x41505400
@@ -73,6 +78,146 @@ def get_cursor() -> tuple[int, int]:
 
 def screen_size() -> tuple[int, int]:
     return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+class MONITORINFOEXW(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+        ("szDevice", wintypes.WCHAR * 32),
+    ]
+
+
+_MONITORENUMPROC = ctypes.WINFUNCTYPE(
+    wintypes.BOOL,
+    wintypes.HANDLE,
+    wintypes.HDC,
+    ctypes.POINTER(wintypes.RECT),
+    wintypes.LPARAM,
+)
+
+user32.EnumDisplayMonitors.argtypes = [
+    wintypes.HDC,
+    ctypes.c_void_p,
+    _MONITORENUMPROC,
+    wintypes.LPARAM,
+]
+user32.EnumDisplayMonitors.restype = wintypes.BOOL
+user32.GetMonitorInfoW.argtypes = [
+    wintypes.HANDLE,
+    ctypes.POINTER(MONITORINFOEXW),
+]
+user32.GetMonitorInfoW.restype = wintypes.BOOL
+
+_MONITOR_CACHE_SECONDS = 5.0
+_monitor_cache: tuple[float, list] = (0.0, [])
+
+
+def monitors(force: bool = False) -> list[dict]:
+    """Every attached display, left to right, with its physical rect.
+
+    §7.1: the frame loop needs more than the primary monitor's metrics, so
+    this returns the whole set. Enumeration costs a handful of syscalls, which
+    is not worth paying per frame, hence the short cache.
+    """
+    global _monitor_cache
+    now = time.monotonic()
+    cached_at, cached = _monitor_cache
+    if not force and cached and now - cached_at < _MONITOR_CACHE_SECONDS:
+        return cached
+
+    found: list[dict] = []
+
+    def collect(handle, _hdc, _rect, _data) -> bool:
+        info = MONITORINFOEXW()
+        info.cbSize = ctypes.sizeof(MONITORINFOEXW)
+        if not user32.GetMonitorInfoW(handle, ctypes.byref(info)):
+            return True
+        found.append({
+            "name": info.szDevice,
+            "left": int(info.rcMonitor.left),
+            "top": int(info.rcMonitor.top),
+            "width": int(info.rcMonitor.right - info.rcMonitor.left),
+            "height": int(info.rcMonitor.bottom - info.rcMonitor.top),
+            "primary": bool(info.dwFlags & MONITORINFOF_PRIMARY),
+        })
+        return True
+
+    try:
+        user32.EnumDisplayMonitors(None, None, _MONITORENUMPROC(collect), 0)
+    except (OSError, AttributeError):
+        found = []
+    found.sort(key=lambda item: (item["left"], item["top"]))
+    _monitor_cache = (now, found)
+    return found
+
+
+def virtual_rect() -> tuple[int, int, int, int]:
+    """The virtual desktop, i.e. every monitor's bounding box."""
+    return (
+        user32.GetSystemMetrics(76),   # SM_XVIRTUALSCREEN
+        user32.GetSystemMetrics(77),   # SM_YVIRTUALSCREEN
+        user32.GetSystemMetrics(78),   # SM_CXVIRTUALSCREEN
+        user32.GetSystemMetrics(79),   # SM_CYVIRTUALSCREEN
+    )
+
+
+def screen_rect(target: str = "auto") -> tuple[int, int, int, int]:
+    """Physical ``(left, top, width, height)`` of the display to aim at.
+
+    ``target`` is ``auto``/``primary``, ``all`` for the whole virtual desktop,
+    a 1-based display number, or a device name such as ``\\\\.\\DISPLAY2``.
+    An unknown target falls back to the primary display, which is also what
+    happens when Windows will not enumerate anything.
+    """
+    wanted = str(target or "auto").strip().lower()
+    width, height = screen_size()
+
+    if wanted in ("all", "virtual", "全部", "所有"):
+        left, top, span_w, span_h = virtual_rect()
+        if span_w > 0 and span_h > 0:
+            return left, top, span_w, span_h
+
+    if wanted not in ("", "auto", "primary", "主屏", "默认"):
+        for index, monitor in enumerate(monitors(), start=1):
+            name = monitor["name"].lower()
+            bare = name.split("\\")[-1]
+            if wanted == str(index) or wanted in (name, bare):
+                return (
+                    monitor["left"],
+                    monitor["top"],
+                    monitor["width"],
+                    monitor["height"],
+                )
+
+    for monitor in monitors():
+        if monitor["primary"]:
+            return (
+                monitor["left"],
+                monitor["top"],
+                monitor["width"],
+                monitor["height"],
+            )
+    return 0, 0, width, height
+
+
+def screen_name(target: str = "auto") -> str:
+    """Human-readable name of the display ``screen_rect`` would pick."""
+    left, top, width, height = screen_rect(target)
+    for index, monitor in enumerate(monitors(), start=1):
+        if (
+            monitor["left"],
+            monitor["top"],
+            monitor["width"],
+            monitor["height"],
+        ) == (left, top, width, height):
+            label = monitor["name"].split("\\")[-1]
+            return f"{label} {width}x{height}" + (
+                "（主屏）" if monitor["primary"] else ""
+            )
+    return f"{width}x{height}"
 
 
 def button(name: str, down: bool) -> bool:

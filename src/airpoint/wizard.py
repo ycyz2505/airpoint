@@ -224,10 +224,7 @@ def open_wizard(root, bus, controller, config, on_done=None) -> None:
         if not controller.active:
             controller.set_active(True)
         win.attributes("-topmost", False)
-        run_calibration(
-            win, bus, controller, config,
-            win.winfo_screenwidth(), win.winfo_screenheight(),
-        )
+        run_calibration(win, bus, controller, config)
         win.attributes("-topmost", True)
         result_var.set("标定已保存。")
 

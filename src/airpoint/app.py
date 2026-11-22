@@ -483,8 +483,6 @@ def main() -> None:
             controller.preview,
             controller,
             config,
-            root.winfo_screenwidth(),
-            root.winfo_screenheight(),
         )
 
     def on_survey() -> None:

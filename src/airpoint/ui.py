@@ -177,6 +177,7 @@ SECTIONS = [
                 ["auto", "absolute", "relative"],
             ),
             ("pointer.hand", "手", "choice", ["right", "left"]),
+            ("pointer.screen", "目标屏幕", "screen", []),
             ("pointer.active_on_start", "启动即激活", "bool"),
             ("pointer.mouse_pause", "鼠标一动就暂停", "bool"),
             ("pointer.mouse_pause_sec", "暂停秒数", "int"),
@@ -314,7 +315,8 @@ def open_settings(
 
     def save() -> None:
         try:
-            for key, kind, var in bindings:
+            for binding in bindings:
+                key, kind, var = binding[0], binding[1], binding[2]
                 raw = var.get()
                 if kind == "bool":
                     value = bool(raw)
@@ -322,6 +324,10 @@ def open_settings(
                     value = int(str(raw).strip())
                 elif kind == "float":
                     value = float(str(raw).strip())
+                elif kind == "screen":
+                    combo = binding[3] if len(binding) > 3 else None
+                    table = getattr(combo, "_ap_values", None) or {}
+                    value = table.get(str(raw), str(raw))
                 else:
                     value = str(raw)
                 config.set(key, value)
@@ -404,11 +410,47 @@ def _build_update_status(frame, config, version: str) -> None:
     )
 
 
+def _fill_screens(combo) -> None:
+    """Populate a screen picker with one row per attached display."""
+    from . import inject
+
+    labels = ["自动（主屏）"]
+    values = {"自动（主屏）": "auto"}
+    for index, monitor in enumerate(inject.monitors(force=True), start=1):
+        name = monitor["name"].split("\\")[-1]
+        label = (
+            f"{index}. {name} {monitor['width']}x{monitor['height']}"
+            + ("（主屏）" if monitor["primary"] else "")
+        )
+        labels.append(label)
+        values[label] = str(index)
+    if len(inject.monitors()) > 1:
+        labels.append("全部屏幕（虚拟桌面）")
+        values["全部屏幕（虚拟桌面）"] = "all"
+
+    current = combo.get()
+    if current and current not in values.values():
+        # The saved display is not attached right now (a classroom panel that
+        # is unplugged at home). Keep it selectable so saving the page does
+        # not quietly overwrite the choice.
+        label = f"{current}（当前未连接）"
+        labels.append(label)
+        values[label] = current
+    combo.configure(values=labels)
+    combo._ap_values = values
+    for label, value in values.items():
+        if value == current:
+            combo.set(label)
+            return
+    combo.set(labels[0])
+
+
 def _build_fields(frame, config, fields, bindings, controller=None) -> None:
     for row, field in enumerate(fields):
         key, label, kind = field[0], field[1], field[2]
         options = field[3] if len(field) > 3 else None
         value = config.get(key)
+        combo = None
 
         ttk.Label(frame, text=label).grid(
             row=row, column=0, sticky="w", padx=(0, 16), pady=6
@@ -428,20 +470,28 @@ def _build_fields(frame, config, fields, bindings, controller=None) -> None:
             )
         elif kind == "choice":
             var = tk.StringVar(value="" if value is None else str(value))
-            ttk.Combobox(
+            combo = ttk.Combobox(
                 frame,
                 textvariable=var,
                 values=options or [],
                 state="readonly",
                 width=28,
-            ).grid(row=row, column=1, sticky="w", pady=6)
+            )
+            combo.grid(row=row, column=1, sticky="w", pady=6)
+        elif kind == "screen":
+            var = tk.StringVar(value="" if value is None else str(value))
+            combo = ttk.Combobox(
+                frame, textvariable=var, state="readonly", width=28
+            )
+            combo.grid(row=row, column=1, sticky="w", pady=6)
+            _fill_screens(combo)
         else:
             var = tk.StringVar(value="" if value is None else str(value))
             ttk.Entry(frame, textvariable=var, width=30).grid(
                 row=row, column=1, sticky="w", pady=6
             )
 
-        bindings.append((key, kind, var))
+        bindings.append((key, kind, var, combo))
 
     frame.columnconfigure(1, weight=1)
 

@@ -16,7 +16,13 @@ from .gestures import GestureEngine, TwoHandOpen
 from .hands import HandTracker
 from .paths import log_dir
 from .personalize import Personalizer, features
-from .pointer import AbsolutePointer, RelativePointer, map_point, safe_zone
+from .pointer import (
+    AbsolutePointer,
+    RelativePointer,
+    clamp_to_screen,
+    map_point,
+    safe_zone,
+)
 from .performance import Governor
 from .pose import PoseTracker
 from .recording import Recorder
@@ -331,11 +337,13 @@ class Controller:
         fx, fy = self._blend_from
         return fx + (x - fx) * ease, fy + (y - fy) * ease
 
-    def _edge_scroll(self, y: float, dy: float, screen_h: int, now: float) -> None:
+    def _edge_scroll(self, y: float, dy: float, screen_h: int, now: float,
+                     origin_y: float = 0.0) -> None:
         """Scroll while the hand keeps pushing into the top or bottom band."""
         if not bool(self.config.get("pointer.edge_scroll", True)):
             self._scroll_acc = 0.0
             return
+        y = float(y) - float(origin_y)
         edge = max(8, int(screen_h * 0.05))
         if dy < 0 and y <= edge:
             direction = 1
@@ -418,7 +426,7 @@ class Controller:
             self.log("injection blocked (elevated window?)")
 
     def _learn_offset(self, mode, box, calibration, screen_w, screen_h,
-                      cursor) -> None:
+                      cursor, origin=(0.0, 0.0)) -> None:
         if mode != "absolute" or not bool(
             self.config.get("pointer.self_calib", True)
         ):
@@ -427,7 +435,9 @@ class Controller:
             return
         sx = sum(item[0] for item in self._settle) / len(self._settle)
         sy = sum(item[1] for item in self._settle) / len(self._settle)
-        settled = map_point(sx, sy, box, screen_w, screen_h, calibration)
+        settled = map_point(
+            sx, sy, box, screen_w, screen_h, calibration, origin
+        )
         if settled is None:
             return
         before = self._selfcal.offset
@@ -820,13 +830,16 @@ class Controller:
                         else "up"
                     )
 
-            screen_w, screen_h = inject.screen_size()
+            screen_left, screen_top, screen_w, screen_h = inject.screen_rect(
+                self.config.get("pointer.screen", "auto")
+            )
+            origin = (float(screen_left), float(screen_top))
 
             if kind != "none" and bool(
                 self.config.get("overlay.presentation", False)
             ):
                 cx, cy = inject.get_cursor()
-                if safe_zone(cx, cy, screen_w, screen_h):
+                if safe_zone(cx, cy, screen_w, screen_h, origin=origin):
                     kind = "none"
 
             calibration = self.config.get("pointer.calibration", [])
@@ -841,6 +854,8 @@ class Controller:
                 and int(calibration_size[0]) == screen_w
                 and int(calibration_size[1]) == screen_h
             )
+            # The homography is fitted in the display's own 0..w pixels, so
+            # map_point() adds the origin in both branches.
             active_calibration = calibration if calibrated else None
 
             writing = bool(self.config.get("pointer.write_mode", True)) and (
@@ -859,6 +874,7 @@ class Controller:
                         screen_w,
                         screen_h,
                         calibration=active_calibration,
+                        origin=origin,
                     )
                     if target is not None:
                         previous = self._last_target
@@ -874,7 +890,10 @@ class Controller:
                             # The cursor stops at the screen edge, so the
                             # scroll has to follow the hand's own push.
                             push = target[1] - previous[1] if previous else 0.0
-                            self._edge_scroll(cy, push * screen_h, screen_h, now)
+                            self._edge_scroll(
+                                cy, push * screen_h, screen_h, now,
+                                origin[1],
+                            )
                 else:
                     if not self._inside:
                         pointer.reset()
@@ -887,6 +906,9 @@ class Controller:
                         x, y = inject.get_cursor()
                         target_x = x + dx + self._carry_x
                         target_y = y + dy + self._carry_y
+                        target_x, target_y = clamp_to_screen(
+                            target_x, target_y, screen_w, screen_h, origin
+                        )
                         next_x = int(round(target_x))
                         next_y = int(round(target_y))
                         if writing:
@@ -906,7 +928,7 @@ class Controller:
                                 -1.0, min(1.0, target_y - next_y)
                             )
 
-                        self._edge_scroll(next_y, dy, screen_h, now)
+                        self._edge_scroll(next_y, dy, screen_h, now, origin[1])
 
             self._inside = inside
 
@@ -931,7 +953,7 @@ class Controller:
                     self._button("left", True, now)
                     self._button("left", False, now)
                     self._learn_offset(mode, box, active_calibration, screen_w,
-                                       screen_h, cursor)
+                                       screen_h, cursor, origin)
                 if out.double_click:
                     self._button("left", True, now)
                     self._button("left", False, now)

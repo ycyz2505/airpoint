@@ -238,8 +238,6 @@ def open_preview(root, bus: PreviewBus, controller, config) -> None:
             bus,
             controller,
             config,
-            win.winfo_screenwidth(),
-            win.winfo_screenheight(),
         )
 
     def clear_calibration() -> None:

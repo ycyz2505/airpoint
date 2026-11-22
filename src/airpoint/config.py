@@ -92,6 +92,7 @@ DEFAULTS = {
     "pointer": {
         "mode": "auto",
         "hand": "right",
+        "screen": "auto",
         "gain_relative": 1.8,
         "deadzone_px": 0.5,
         "prediction_ms": 40,

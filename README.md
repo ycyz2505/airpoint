@@ -202,6 +202,11 @@ build is left untouched and the app starts from defaults.
   (index and middle up, ring and pinky down) scrolls one notch every 0.6 s,
   with the direction taken from which fingertip is higher. Both are switches
   (**贴边滚动**, **近距 V 字手势滚动**).
+- Multi-monitor: **目标屏幕** in the pointer tab picks which display the air
+  cursor drives — the primary one, a numbered display, or the whole virtual
+  desktop. Mapping, calibration, the edge-scroll band, the safe zone, the
+  magnifier, and the HUD all move to that display; the setting is
+  `pointer.screen` (`auto` by default).
 - Elevated windows: when Windows refuses injected input (a UIPI-blocked
   window), the status line and HUD say so instead of failing silently.
 - Personalized gestures: **录制手势样本…** in the gesture tab walks through

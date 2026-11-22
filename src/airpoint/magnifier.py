@@ -125,17 +125,25 @@ def source_rect(
     screen_h: int,
     zoom: float,
     size: int,
+    origin: tuple[float, float] = (0.0, 0.0),
 ) -> tuple[int, int, int]:
-    """Square screen region that fills the magnifier at the given zoom."""
+    """Square screen region that fills the magnifier at the given zoom.
+
+    ``cursor_*`` and the returned rect are virtual-desktop coordinates;
+    ``origin`` is the target display's top-left, so the region stays on that
+    display instead of being clamped to the primary one.
+    """
     zoom = max(1.0, float(zoom))
     size = max(16, int(size))
+    ox = int(round(float(origin[0])))
+    oy = int(round(float(origin[1])))
     side = max(8, int(round(size / zoom)))
     side = min(side, int(screen_w), int(screen_h))
-    left = int(round(cursor_x - side / 2.0))
-    top = int(round(cursor_y - side / 2.0))
+    left = int(round(cursor_x - ox - side / 2.0))
+    top = int(round(cursor_y - oy - side / 2.0))
     left = max(0, min(int(screen_w) - side, left))
     top = max(0, min(int(screen_h) - side, top))
-    return left, top, side
+    return left + ox, top + oy, side
 
 
 def window_position(
@@ -145,17 +153,20 @@ def window_position(
     screen_h: int,
     size: int,
     offset: int = 48,
+    origin: tuple[float, float] = (0.0, 0.0),
 ) -> tuple[int, int]:
     """Place the window beside the cursor, flipping near the screen edges."""
     size = max(16, int(size))
+    ox = int(round(float(origin[0])))
+    oy = int(round(float(origin[1])))
     x = int(round(cursor_x)) + offset
     y = int(round(cursor_y)) + offset
-    if x + size > screen_w:
+    if x + size > ox + screen_w:
         x = int(round(cursor_x)) - offset - size
-    if y + size > screen_h:
+    if y + size > oy + screen_h:
         y = int(round(cursor_y)) - offset - size
-    x = max(0, min(int(screen_w) - size, x))
-    y = max(0, min(int(screen_h) - size, y))
+    x = max(ox, min(ox + int(screen_w) - size, x))
+    y = max(oy, min(oy + int(screen_h) - size, y))
     return x, y
 
 
@@ -363,13 +374,16 @@ class WritingMagnifier:
         size = self._size()
         zoom = self._zoom()
         cursor_x, cursor_y = inject.get_cursor()
-        screen_w, screen_h = inject.screen_size()
+        screen_left, screen_top, screen_w, screen_h = inject.screen_rect(
+            self.config.get("pointer.screen", "auto")
+        )
         if screen_w <= 0 or screen_h <= 0:
             self._hide()
             return
+        origin = (float(screen_left), float(screen_top))
 
         left, top, side = source_rect(
-            cursor_x, cursor_y, screen_w, screen_h, zoom, size
+            cursor_x, cursor_y, screen_w, screen_h, zoom, size, origin
         )
         image = grab(left, top, side, size, size)
         if image is None:
@@ -389,7 +403,7 @@ class WritingMagnifier:
             return
 
         wx, wy = window_position(
-            cursor_x, cursor_y, screen_w, screen_h, size + 2
+            cursor_x, cursor_y, screen_w, screen_h, size + 2, origin=origin
         )
         if (wx, wy) != self._last:
             self._last = (wx, wy)

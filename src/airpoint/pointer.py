@@ -4,8 +4,16 @@ import math
 
 
 def safe_zone(x: float, y: float, screen_w: int, screen_h: int,
-              margin: float = 0.05) -> bool:
-    """True when the point sits in the click-free screen-edge band."""
+              margin: float = 0.05,
+              origin: tuple[float, float] = (0.0, 0.0)) -> bool:
+    """True when the point sits in the click-free screen-edge band.
+
+    ``origin`` is the top-left of the target display in virtual-desktop
+    coordinates; a cursor on a second monitor is not near this screen's edge
+    just because its virtual x is large.
+    """
+    x = float(x) - float(origin[0])
+    y = float(y) - float(origin[1])
     mx = max(1.0, float(screen_w) * float(margin))
     my = max(1.0, float(screen_h) * float(margin))
     return x < mx or y < my or x > screen_w - mx or y > screen_h - my
@@ -133,8 +141,32 @@ class RelativePointer:
         return dx, dy
 
 
-def map_point(x, y, box, screen_w, screen_h, calibration=None):
-    """Map a normalized frame point inside ``box`` to screen pixels."""
+def clamp_to_screen(
+    x: float,
+    y: float,
+    screen_w: int,
+    screen_h: int,
+    origin: tuple[float, float] = (0.0, 0.0),
+) -> tuple[float, float]:
+    """Keep a virtual-desktop point inside the target display's rect (§7.4)."""
+    left = float(origin[0])
+    top = float(origin[1])
+    right = left + max(1.0, float(screen_w)) - 1.0
+    bottom = top + max(1.0, float(screen_h)) - 1.0
+    return (
+        max(left, min(right, float(x))),
+        max(top, min(bottom, float(y))),
+    )
+
+
+def map_point(x, y, box, screen_w, screen_h, calibration=None,
+              origin: tuple[float, float] = (0.0, 0.0)):
+    """Map a normalized frame point inside ``box`` to screen pixels.
+
+    ``origin`` shifts the result into virtual-desktop coordinates, so a
+    target display that is not the primary one maps to its own pixels
+    instead of the primary's.
+    """
     if not box or len(box) != 4:
         return None
     x0, y0, x1, y1 = [float(item) for item in box]
@@ -150,13 +182,16 @@ def map_point(x, y, box, screen_w, screen_h, calibration=None):
             return None
         u = (h[0] * x + h[1] * y + h[2]) / denominator
         v = (h[3] * x + h[4] * y + h[5]) / denominator
-        return u, v
+        return u + float(origin[0]), v + float(origin[1])
 
     u = (x - x0) / (x1 - x0)
     v = (y - y0) / (y1 - y0)
     u = max(0.0, min(1.0, u))
     v = max(0.0, min(1.0, v))
-    return u * screen_w, v * screen_h
+    return (
+        float(origin[0]) + u * screen_w,
+        float(origin[1]) + v * screen_h,
+    )
 
 
 class AbsolutePointer:
@@ -179,7 +214,10 @@ class AbsolutePointer:
         screen_w: int,
         screen_h: int,
         calibration=None,
+        origin: tuple[float, float] = (0.0, 0.0),
     ):
         fx = self._fx(x, t)
         fy = self._fy(y, t)
-        return map_point(fx, fy, box, screen_w, screen_h, calibration)
+        return map_point(
+            fx, fy, box, screen_w, screen_h, calibration, origin
+        )

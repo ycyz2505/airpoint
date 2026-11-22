@@ -695,6 +695,115 @@ class SafeZoneTests(unittest.TestCase):
         self.assertFalse(safe_zone(100, 100, 1920, 1080))
 
 
+class MultiMonitorTests(unittest.TestCase):
+    """§7.1: a second display is a rect with an origin, not a bigger screen."""
+
+    def test_map_point_shifts_into_a_secondary_display(self):
+        from airpoint.pointer import map_point
+
+        box = [0.0, 0.0, 1.0, 1.0]
+        self.assertEqual(map_point(0.5, 0.5, box, 1920, 1080), (960, 540))
+        self.assertEqual(
+            map_point(0.5, 0.5, box, 1920, 1080, origin=(1920, 0)),
+            (2880, 540),
+        )
+        self.assertEqual(
+            map_point(0.0, 0.0, box, 1920, 1080, origin=(1920, 0)),
+            (1920, 0),
+        )
+
+    def test_map_point_calibration_also_gets_the_origin(self):
+        from airpoint.pointer import map_point
+
+        # A 100x scale homography fitted on the secondary display's own pixels.
+        scale = [100.0, 0.0, 0.0, 0.0, 100.0, 0.0, 0.0, 0.0, 1.0]
+        box = [0.0, 0.0, 1.0, 1.0]
+        self.assertEqual(
+            map_point(0.5, 0.5, box, 1920, 1080, scale, origin=(1920, 0)),
+            (1970, 50),
+        )
+
+    def test_clamp_to_screen_uses_the_display_rect(self):
+        from airpoint.pointer import clamp_to_screen
+
+        self.assertEqual(
+            clamp_to_screen(5000, 5000, 1920, 1080), (1919, 1079)
+        )
+        self.assertEqual(
+            clamp_to_screen(5000, 5000, 1920, 1080, (1920, 0)), (3839, 1079)
+        )
+        # A point left of a right-hand display is pulled onto it, not to x=0.
+        self.assertEqual(
+            clamp_to_screen(10, 500, 1920, 1080, (1920, 0)), (1920, 500)
+        )
+
+    def test_safe_zone_is_relative_to_the_display(self):
+        from airpoint.pointer import safe_zone
+
+        # Virtual x=1930 is 10 px into the second display's left edge.
+        self.assertTrue(safe_zone(1930, 540, 1920, 1080, origin=(1920, 0)))
+        # The middle of that display is not an edge, even though its virtual
+        # x is past the primary display's right edge.
+        self.assertFalse(safe_zone(2880, 540, 1920, 1080, origin=(1920, 0)))
+        self.assertTrue(safe_zone(2880, 540, 1920, 1080))
+
+    def test_screen_rect_picks_the_requested_display(self):
+        from airpoint import inject
+
+        found = [
+            {
+                "name": "\\\\.\\DISPLAY1", "left": 0, "top": 0,
+                "width": 1920, "height": 1080, "primary": True,
+            },
+            {
+                "name": "\\\\.\\DISPLAY2", "left": 1920, "top": 0,
+                "width": 2560, "height": 1440, "primary": False,
+            },
+        ]
+        original = inject.monitors
+        try:
+            inject.monitors = lambda force=False: found
+            self.assertEqual(inject.screen_rect("auto"), (0, 0, 1920, 1080))
+            self.assertEqual(inject.screen_rect("2"), (1920, 0, 2560, 1440))
+            self.assertEqual(
+                inject.screen_rect("\\\\.\\DISPLAY2"), (1920, 0, 2560, 1440)
+            )
+            self.assertEqual(inject.screen_rect("DISPLAY2"), (1920, 0, 2560, 1440))
+            self.assertEqual(inject.screen_rect("nonsense"), (0, 0, 1920, 1080))
+        finally:
+            inject.monitors = original
+
+    def test_screen_rect_falls_back_when_enumeration_fails(self):
+        from airpoint import inject
+
+        original_monitors = inject.monitors
+        original_size = inject.screen_size
+        try:
+            inject.monitors = lambda force=False: []
+            inject.screen_size = lambda: (1280, 720)
+            self.assertEqual(inject.screen_rect("auto"), (0, 0, 1280, 720))
+            self.assertEqual(inject.screen_rect("3"), (0, 0, 1280, 720))
+        finally:
+            inject.monitors = original_monitors
+            inject.screen_size = original_size
+
+    def test_magnifier_keeps_its_crop_on_the_second_display(self):
+        from airpoint.magnifier import source_rect, window_position
+
+        left, top, side = source_rect(
+            2880, 540, 1920, 1080, 2.5, 200, origin=(1920, 0)
+        )
+        self.assertEqual(side, 80)
+        self.assertEqual((left, top), (2840, 500))
+
+        x, y = window_position(
+            1930, 1060, 1920, 1080, 200, 48, origin=(1920, 0)
+        )
+        self.assertGreaterEqual(x, 1920)
+        self.assertLessEqual(x + 200, 1920 + 1920)
+        self.assertLessEqual(y + 200, 1080)
+
+
 class DiagnosticsTests(unittest.TestCase):
     def test_export_writes_header_and_rows(self):
         from airpoint.diagnostics import COLUMNS, Diagnostics
@@ -1050,7 +1159,7 @@ class SettingsSchemaTests(unittest.TestCase):
                     continue
                 self.assertTrue(resolve(key), f"{title}: {key} 不在默认配置里")
                 self.assertIn(field[2], ("bool", "int", "float", "str",
-                                         "choice", "action"))
+                                         "choice", "action", "screen"))
 
     def test_choices_match_the_default(self):
         from airpoint import ui
