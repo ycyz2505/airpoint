@@ -34,11 +34,39 @@ from .ui import (
 from .version import __version__
 
 ERROR_ALREADY_EXISTS = 183
+EVENT_MODIFY_STATE = 0x0002
 _MUTEX = None
+_EVENT = None
+NOTIFY_EVENT = "Local\\OpticalInputSvcShow"
+
+
+def _notify_running_instance() -> bool:
+    """Poke the instance that already holds the mutex (§12.3).
+
+    A second double-click must not open a window, but silently doing nothing
+    looks like the program is broken, so it asks the running copy to flash
+    its tray balloon instead.
+    """
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenEventW.restype = ctypes.c_void_p
+    kernel32.OpenEventW.argtypes = [
+        ctypes.c_uint32,
+        ctypes.c_bool,
+        ctypes.c_wchar_p,
+    ]
+    kernel32.SetEvent.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel32.OpenEventW(EVENT_MODIFY_STATE, False, NOTIFY_EVENT)
+    if not handle:
+        return False
+    try:
+        return bool(kernel32.SetEvent(handle))
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _single_instance() -> bool:
-    global _MUTEX
+    global _MUTEX, _EVENT
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateMutexW.restype = ctypes.c_void_p
     kernel32.CreateMutexW.argtypes = [
@@ -49,7 +77,18 @@ def _single_instance() -> bool:
     _MUTEX = kernel32.CreateMutexW(None, False, "Local\\OpticalInputSvc")
     if not _MUTEX:
         return False
-    return ctypes.get_last_error() != ERROR_ALREADY_EXISTS
+    if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+        _notify_running_instance()
+        return False
+    kernel32.CreateEventW.restype = ctypes.c_void_p
+    kernel32.CreateEventW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_bool,
+        ctypes.c_bool,
+        ctypes.c_wchar_p,
+    ]
+    _EVENT = kernel32.CreateEventW(None, False, False, NOTIFY_EVENT)
+    return True
 
 
 def _dpi() -> None:
@@ -102,6 +141,30 @@ def _message(text: str) -> None:
         root.destroy()
     except Exception:
         pass
+
+
+def _watch_second_launch(icon, log) -> None:
+    """Flash the tray icon when a second copy is started (§12.3)."""
+    if not _EVENT:
+        return
+
+    def loop() -> None:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.WaitForSingleObject.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32
+        ]
+        while True:
+            result = kernel32.WaitForSingleObject(_EVENT, 60_000)
+            if result != 0:
+                continue
+            try:
+                icon.notify("服务已在运行", "OpticalInputSvc")
+            except Exception as exc:
+                log(f"second-launch notice failed: {exc}")
+
+    threading.Thread(
+        target=loop, daemon=True, name="airpoint-second-launch"
+    ).start()
 
 
 def main() -> None:
@@ -452,6 +515,7 @@ def main() -> None:
         on_wizard=on_wizard,
         describe=controller.describe,
     )
+    _watch_second_launch(icon, log)
     marker = updates_dir() / f"started-{__version__}.ok"
     try:
         marker.write_text(str(time.time()), encoding="utf-8")
