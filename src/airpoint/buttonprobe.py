@@ -26,6 +26,7 @@ WM_XBUTTONDOWN = 0x020B
 LLMHF_INJECTED = 0x0001
 LLKHF_INJECTED = 0x00000010
 WM_QUIT = 0x0012
+PM_NOREMOVE = 0x0000
 
 VK_BROWSER_BACK = 0xA6
 VK_BROWSER_FORWARD = 0xA7
@@ -81,6 +82,10 @@ user32.CallNextHookEx.argtypes = [
 user32.CallNextHookEx.restype = ctypes.c_ssize_t
 user32.GetMessageW.argtypes = [
     ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT
+]
+user32.PeekMessageW.argtypes = [
+    ctypes.POINTER(wintypes.MSG), wintypes.HWND,
+    wintypes.UINT, wintypes.UINT, wintypes.UINT,
 ]
 user32.PostThreadMessageW.argtypes = [
     wintypes.DWORD, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM
@@ -154,9 +159,11 @@ class _Listener:
 
     def __init__(self) -> None:
         self.events: queue.Queue[str] = queue.Queue()
+        self.error = ""
         self._mouse_hook = None
         self._key_hook = None
         self._thread_id = 0
+        self._stop_event = threading.Event()
         self._thread = threading.Thread(
             target=self._run, daemon=True, name="airpoint-button-probe"
         )
@@ -167,6 +174,7 @@ class _Listener:
         self._thread.start()
 
     def stop(self) -> None:
+        self._stop_event.set()
         if self._thread_id:
             user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
 
@@ -202,6 +210,12 @@ class _Listener:
 
     def _run(self) -> None:
         self._thread_id = int(kernel32.GetCurrentThreadId())
+        # Create this thread's message queue before any stop request can be
+        # posted, so a window closed immediately still shuts the hooks down.
+        message = wintypes.MSG()
+        user32.PeekMessageW(
+            ctypes.byref(message), None, 0, 0, PM_NOREMOVE
+        )
         self._mouse_hook = user32.SetWindowsHookExW(
             WH_MOUSE_LL, self._mouse_proc, None, 0
         )
@@ -209,9 +223,14 @@ class _Listener:
             WH_KEYBOARD_LL, self._key_proc, None, 0
         )
         if not self._mouse_hook and not self._key_hook:
-            self.events.put("hook 安装失败，无法自检。")
+            self.error = "钩子安装失败，无法自检。"
             return
-        message = wintypes.MSG()
+        if self._stop_event.is_set():
+            for hook in (self._mouse_hook, self._key_hook):
+                if hook:
+                    user32.UnhookWindowsHookEx(hook)
+            self._mouse_hook = self._key_hook = None
+            return
         while user32.GetMessageW(
             ctypes.byref(message), None, 0, 0
         ) > 0:
@@ -268,8 +287,13 @@ def open_probe(parent) -> None:
     listener = _Listener()
     seen: list[str] = []
     closed = {"value": False}
+    failed = {"value": False}
 
     def poll() -> None:
+        if listener.error and not failed["value"]:
+            failed["value"] = True
+            log_var.set("")
+            verdict_var.set(listener.error)
         changed = False
         while True:
             try:

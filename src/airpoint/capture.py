@@ -50,6 +50,18 @@ def apply_exposure(cap, log=None) -> bool:
     return False
 
 
+def backend_order(config) -> tuple[int, ...]:
+    """OpenCV backends to try, best first, for the configured one."""
+    return {
+        "dshow": (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
+        "msmf": (cv2.CAP_MSMF, cv2.CAP_DSHOW, cv2.CAP_ANY),
+        "any": (cv2.CAP_ANY, cv2.CAP_DSHOW, cv2.CAP_MSMF),
+    }.get(
+        str(config.get("camera.backend", "dshow")).lower(),
+        (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
+    )
+
+
 def targets_for(config, max_width=None) -> list[tuple[int, int]]:
     """Resolutions to try, best first."""
     try:
@@ -105,14 +117,7 @@ class Camera:
         targets = targets_for(self.config, self.max_width)
         fps = int(self.config.get("camera.fps", 30))
 
-        order = {
-            "dshow": (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
-            "msmf": (cv2.CAP_MSMF, cv2.CAP_DSHOW, cv2.CAP_ANY),
-            "any": (cv2.CAP_ANY, cv2.CAP_DSHOW, cv2.CAP_MSMF),
-        }.get(
-            str(self.config.get("camera.backend", "dshow")).lower(),
-            (cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY),
-        )
+        order = backend_order(self.config)
 
         for index in indices:
             for backend in order:

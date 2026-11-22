@@ -954,6 +954,19 @@ class EnvReportTests(unittest.TestCase):
         )
         self.assertIn("帧率不足", text)
 
+    def test_a_missing_fps_reading_is_not_a_slow_camera(self):
+        text = self._report(
+            [],
+            [
+                {
+                    "device": 0, "asked": (1920, 1080), "got": (1920, 1080),
+                    "fps": 0.0, "frame": True,
+                },
+            ],
+        )
+        self.assertNotIn("帧率不足", text)
+        self.assertIn("驱动没报出读数", text)
+
     def test_report_notes_unavailable_manual_exposure(self):
         text = self._report(
             [],

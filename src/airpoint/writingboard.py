@@ -96,6 +96,8 @@ class WritingBoard:
         self._current = None
         self._status = None
         self._busy = False
+        self._ox = None
+        self._oy = None
 
     def _gain(self) -> float:
         try:
@@ -144,6 +146,8 @@ class WritingBoard:
         self._busy = False
         self._strokes = []
         self._current = None
+        self._ox = None
+        self._oy = None
         win_left, win_top, side, _side = board_rect(left, top, w, h)
         self._rect = (win_left, win_top, side, side)
         # Grab the backdrop before the board covers it, or the snapshot would
@@ -235,37 +239,65 @@ class WritingBoard:
     def _down(self, event) -> None:
         self._current = [(float(event.x_root), float(event.y_root))]
         self._strokes.append(self._current)
-        self._redraw()
 
     def _move(self, event) -> None:
-        if self._current is None:
+        if self._current is None or self._canvas is None:
             return
-        self._current.append((float(event.x_root), float(event.y_root)))
-        self._redraw()
+        point = (float(event.x_root), float(event.y_root))
+        last = self._current[-1]
+        if abs(point[0] - last[0]) < 1.0 and abs(point[1] - last[1]) < 1.0:
+            return
+        self._current.append(point)
+        # Draw only the new segment: rebuilding every stroke on every motion
+        # event is O(n²) on a long stroke and stutters on the classroom i5.
+        self._segment(last, point)
 
     def _up(self, event) -> None:
         if self._current is None:
             return
-        self._current.append((float(event.x_root), float(event.y_root)))
+        point = (float(event.x_root), float(event.y_root))
+        last = self._current[-1]
+        self._current.append(point)
+        if point != last:
+            self._segment(last, point)
         if len(self._current) < 2:
             self._strokes.pop()
+            self._canvas.delete("stroke")
         self._current = None
-        self._redraw()
+        self._update_status()
+
+    def _segment(self, a, b) -> None:
+        if self._canvas is None:
+            return
+        ox, oy = self._canvas_origin()
+        self._canvas.create_line(
+            a[0] - ox, a[1] - oy, b[0] - ox, b[1] - oy,
+            fill="#c81e1e", width=4, capstyle="round",
+            joinstyle="round", tags="stroke",
+        )
+
+    def _canvas_origin(self):
+        if self._ox is not None and self._oy is not None:
+            return self._ox, self._oy
+        try:
+            self._ox = self._canvas.winfo_rootx()
+            self._oy = self._canvas.winfo_rooty()
+        except (tk.TclError, AttributeError):
+            return 0, 0
+        return self._ox, self._oy
 
     def _clear(self) -> None:
         self._strokes = []
         self._current = None
-        self._redraw()
+        if self._canvas is not None:
+            self._canvas.delete("stroke")
+        self._update_status()
 
     def _redraw(self) -> None:
         if self._canvas is None:
             return
         self._canvas.delete("stroke")
-        try:
-            ox = self._canvas.winfo_rootx()
-            oy = self._canvas.winfo_rooty()
-        except tk.TclError:
-            return
+        ox, oy = self._canvas_origin()
         for stroke in self._strokes:
             if len(stroke) < 2:
                 continue
@@ -276,12 +308,16 @@ class WritingBoard:
                 *flat, fill="#c81e1e", width=4, capstyle="round",
                 joinstyle="round", tags="stroke",
             )
-        if self._status is not None:
-            written = int(sum(total_length(s) for s in self._strokes))
-            self._status.configure(
-                text=f"已写 {len(self._strokes)} 笔、约 {written} 像素。"
-                f"提交后缩小 {self._gain():.1f} 倍写回原来的窗口。"
-            )
+        self._update_status()
+
+    def _update_status(self) -> None:
+        if self._status is None:
+            return
+        written = int(sum(total_length(s) for s in self._strokes))
+        self._status.configure(
+            text=f"已写 {len(self._strokes)} 笔、约 {written} 像素。"
+            f"提交后缩小 {self._gain():.1f} 倍写回原来的窗口。"
+        )
 
     def _commit(self) -> None:
         if self._busy:

@@ -77,7 +77,7 @@ def camera_probe(config, log=None, limit: int = 4) -> list[dict]:
     """
     import cv2
 
-    from .capture import apply_exposure, targets_for
+    from .capture import apply_exposure, backend_order, targets_for
 
     device = str(config.get("camera.device", "auto"))
     if device.lower() == "auto":
@@ -89,30 +89,41 @@ def camera_probe(config, log=None, limit: int = 4) -> list[dict]:
             indices = [0]
 
     fps_wanted = int(config.get("camera.fps", 30))
+    names = {cv2.CAP_DSHOW: "dshow", cv2.CAP_MSMF: "msmf"}
     results = []
     for index in indices:
-        cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
-            cap.release()
+        cap = None
+        backend = ""
+        for choice in backend_order(config):
+            candidate = cv2.VideoCapture(index, choice)
+            if candidate.isOpened():
+                cap = candidate
+                backend = names.get(choice, "any")
+                break
+            candidate.release()
+        if cap is None:
             continue
+        # Probe every advertised mode, not just until the first frame: a
+        # configured 720p answer would otherwise end the search and hide a
+        # working 4K mode, which is exactly what §14.2 asks about.
         for width, height in targets_for(config):
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
             cap.set(cv2.CAP_PROP_FPS, fps_wanted)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             ok, frame = cap.read()
             got_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             got_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             got_fps = cap.get(cv2.CAP_PROP_FPS)
             results.append({
                 "device": index,
+                "backend": backend,
                 "asked": (width, height),
                 "got": (got_w or 0, got_h or 0),
                 "fps": float(got_fps or 0.0),
                 "frame": bool(ok and frame is not None),
             })
-            if ok and frame is not None:
-                break
         manual = apply_exposure(cap, log)
         exposure = cap.get(cv2.CAP_PROP_EXPOSURE)
         results.append({
@@ -159,8 +170,9 @@ def build_report(displays, camera, config, version: str) -> str:
     for item in modes:
         asked = "x".join(str(value) for value in item["asked"])
         got = "x".join(str(value) for value in item["got"])
+        backend = f" [{item['backend']}]" if item.get("backend") else ""
         lines.append(
-            f"  #{item['device']} 请求 {asked} → 实际 {got} "
+            f"  #{item['device']}{backend} 请求 {asked} → 实际 {got} "
             f"@{item['fps']:.0f} fps "
             f"{'有画面' if item['frame'] else '无画面'}"
         )
@@ -184,11 +196,20 @@ def build_report(displays, camera, config, version: str) -> str:
     lines.append(
         f"  4K：{'可用' if has_4k else '不可用，按 1080p 规划'}"
     )
-    slow = [item for item in modes if item["frame"] and item["fps"] < 24]
+    slow = [
+        item for item in modes if item["frame"] and 0 < item["fps"] < 24
+    ]
     if slow:
         lines.append(
             f"  帧率不足：{slow[0]['fps']:.0f} fps，手部跟踪会变钝。"
         )
+    # Many DirectShow drivers answer 0 for CAP_PROP_FPS; that is a missing
+    # reading, not a slow camera, so it must not become a "帧率不足" verdict.
+    unreadable = [
+        item for item in modes if item["frame"] and item["fps"] <= 0
+    ]
+    if unreadable:
+        lines.append("  帧率：驱动没报出读数，流畅度请直接看预览画面。")
     manual = any(item["exposure_manual"] for item in exposures)
     lines.append(
         "  手动曝光：" + (
