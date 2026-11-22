@@ -9,6 +9,12 @@ meters away.
 
 ## Status
 
+Feature-complete for the classroom use it was written for. What remains is
+on-site measurement, not code: field of view at 7–9 m, the palm-size and
+pinch-confusion numbers, the real 4K cost on the i5-10, and whether the Seewo
+whiteboard accepts synthesized drags. The environment self-check and the
+side-button self-check exist to answer the parts a program can answer.
+
 Working build: silent tray, password-protected settings, self-update, pose and
 hand tracking, absolute and relative pointing, A–E tiering, calibration,
 profiles, recording, replay, magnifier, presentation mode, diagnostics export,
@@ -16,14 +22,6 @@ survey mode, an environment self-check, a side-button self-check, a writing
 board, a first-run wizard, a suggested and editable mapping box, online
 self-calibration, double-click detection, and a configurable target display
 for multi-monitor classrooms.
-
-## Planned capabilities
-
-- Absolute ("virtual touch") and relative ("air mouse") pointing modes
-- Auto tiering by hand size, detection rate, jitter, and latency
-- Region-of-interest gating with pause / re-engage
-- Left click, right click, drag, double click, and wheel
-- Sit/stand profiles and offline replay for tuning
 
 ## Auto-update
 
@@ -270,7 +268,7 @@ tags.
 - Windows 10
 - 1080p display (a second display can be targeted with `pointer.screen`)
 - Built-in RGB camera (4K preferred)
-- Python prototype first, packaged as a single executable
+- Packaged as a single, portable executable; data stays in `D:\OpticalInput\`
 
 ## Notes
 
