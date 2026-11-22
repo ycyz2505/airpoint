@@ -1064,6 +1064,34 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(merged.get("pointer.hand"), "left")
             self.assertEqual(merged.get("camera.fps"), 30)
 
+    def test_save_keeps_the_previous_file_as_backup(self):
+        with TempConfig() as config:
+            config.set("pointer.hand", "left")
+            config.save()
+            config.set("pointer.hand", "auto")
+            config.save()
+            backup = config.path.with_name("config.json.bak")
+            self.assertTrue(backup.exists())
+            old = json.loads(backup.read_text(encoding="utf-8"))
+            self.assertEqual(old["pointer"]["hand"], "left")
+
+    def test_newer_schema_is_left_for_that_build(self):
+        with TempConfig() as config:
+            payload = {
+                "schema_version": 99,
+                "pointer": {"hand": "left", "future_key": True},
+            }
+            config.path.write_text(json.dumps(payload), encoding="utf-8")
+            fresh = Config(config.path)
+            # The unknown shape is not merged in, but the file is preserved
+            # so a newer build still finds its settings.
+            self.assertEqual(fresh.get("pointer.hand"), "right")
+            self.assertEqual(fresh.get("schema_version"), 1)
+            self.assertEqual(
+                json.loads(config.path.read_text(encoding="utf-8")),
+                payload,
+            )
+
 
 class ProfileTests(unittest.TestCase):
     def test_save_load_roundtrip(self):

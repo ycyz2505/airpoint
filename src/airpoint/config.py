@@ -6,8 +6,10 @@ from pathlib import Path
 
 from .paths import data_dir
 
+SCHEMA_VERSION = 1
+
 DEFAULTS = {
-    "schema_version": 1,
+    "schema_version": SCHEMA_VERSION,
     "profile": {
         "current": "",
     },
@@ -169,8 +171,35 @@ class Config:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return
-        if isinstance(raw, dict):
-            self._merge(self.data, raw)
+        if not isinstance(raw, dict):
+            return
+        try:
+            version = int(raw.get("schema_version", SCHEMA_VERSION))
+        except (TypeError, ValueError):
+            version = SCHEMA_VERSION
+        if version > SCHEMA_VERSION:
+            # A newer build wrote this. Its keys may mean something else
+            # here, so keep the file for that build and start from defaults
+            # rather than merging a shape we cannot interpret (§12.5).
+            self._keep_copy()
+            return
+        self._merge(self.data, raw)
+        self.data["schema_version"] = SCHEMA_VERSION
+
+    def _keep_copy(self) -> None:
+        """Copy the current file to ``config.json.bak`` before overwriting it.
+
+        §12.5: a downgrade or a bad migration must leave the previous
+        settings recoverable. A copy, not a move, so the build that wrote the
+        file still finds it if this one is never used again.
+        """
+        try:
+            if self.path.exists():
+                self.path.with_name("config.json.bak").write_bytes(
+                    self.path.read_bytes()
+                )
+        except OSError:
+            pass
 
     def reload_if_changed(self) -> bool:
         """Pick up edits made outside the app; keep the old data on error."""
@@ -189,6 +218,7 @@ class Config:
         # controller thread never sees a half-merged dict.
         merged = copy.deepcopy(self.data)
         self._merge(merged, raw)
+        merged["schema_version"] = SCHEMA_VERSION
         self.data = merged
         for callback in self._watchers:
             try:
@@ -205,6 +235,8 @@ class Config:
                 base[key] = value
 
     def save(self) -> None:
+        self.data["schema_version"] = SCHEMA_VERSION
+        self._keep_copy()
         self.path.write_text(
             json.dumps(self.data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
