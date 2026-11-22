@@ -1590,6 +1590,35 @@ class StatusLineTests(unittest.TestCase):
         controller.set_mouse_takeover(False)
         self.assertFalse(controller.mouse_takeover)
 
+    def test_tier_change_blends_the_cursor_instead_of_jumping(self):
+        from airpoint.controller import Controller
+
+        controller = Controller.__new__(Controller)
+        controller._blend_from = (100.0, 200.0)
+        controller._blend_t0 = 10.0
+        controller._blend_ms = 150.0
+
+        start = controller._blend(900.0, 600.0, 10.0)
+        self.assertAlmostEqual(start[0], 100.0)
+        self.assertAlmostEqual(start[1], 200.0)
+
+        middle = controller._blend(900.0, 600.0, 10.075)
+        self.assertGreater(middle[0], 100.0)
+        self.assertLess(middle[0], 900.0)
+
+        end = controller._blend(900.0, 600.0, 10.2)
+        self.assertEqual(end, (900.0, 600.0))
+        self.assertIsNone(controller._blend_from)
+
+    def test_blend_is_a_no_op_without_a_tier_change(self):
+        from airpoint.controller import Controller
+
+        controller = Controller.__new__(Controller)
+        controller._blend_from = None
+        controller._blend_t0 = 0.0
+        controller._blend_ms = 150.0
+        self.assertEqual(controller._blend(5.0, 7.0, 1.0), (5.0, 7.0))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,6 +73,10 @@ class Controller:
         self._inject_blocked = False
         self._blocked_log = 0.0
         self._mouse_takeover = False
+        self._tier_name = ""
+        self._blend_from = None
+        self._blend_t0 = 0.0
+        self._blend_ms = 150.0
         self._diag = Diagnostics(1800)
         self._crash_backoff = 0.5
         self.personalizer = Personalizer()
@@ -250,6 +254,20 @@ class Controller:
             result["gesture"] = name
             result["pinch"] = name == "pinch"
             result["fist"] = name == "fist"
+
+    def _blend(self, x: float, y: float, now: float) -> tuple[float, float]:
+        """Ease from the pre-tier-change cursor to the new mapping (§7.6)."""
+        if self._blend_from is None:
+            return x, y
+        duration = self._blend_ms / 1000.0
+        t = (now - self._blend_t0) / duration
+        if t >= 1.0:
+            self._blend_from = None
+            return x, y
+        t = max(0.0, t)
+        ease = t * t * (3.0 - 2.0 * t)
+        fx, fy = self._blend_from
+        return fx + (x - fx) * ease, fy + (y - fy) * ease
 
     def _edge_scroll(self, y: float, dy: float, screen_h: int, now: float) -> None:
         """Scroll while the hand keeps pushing into the top or bottom band."""
@@ -662,6 +680,15 @@ class Controller:
                 gestures.reset()
                 inject.release_all()
                 self._inside = False
+                self._blend_from = None
+                self._tier_name = tier_state.name
+            elif tier_state.name != self._tier_name:
+                if self._tier_name and mode == "absolute":
+                    # §7.6: a tier change must not teleport the cursor; slide
+                    # from where it is to the new mapping point.
+                    self._blend_from = inject.get_cursor()
+                    self._blend_t0 = now
+                self._tier_name = tier_state.name
 
             inside = True
             if box:
@@ -738,6 +765,7 @@ class Controller:
                         self._last_target = target
                         if not frozen:
                             cx, cy = self._selfcal.apply(target)
+                            cx, cy = self._blend(cx, cy, now)
                             if writing:
                                 cx, cy = self._stroke.update(cx, cy, True)
                             else:
