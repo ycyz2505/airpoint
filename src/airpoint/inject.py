@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import ctypes
 from ctypes import wintypes
 
@@ -96,3 +97,8 @@ def release_all() -> None:
         MOUSEEVENTF_MIDDLEUP,
     ):
         _mouse(flags)
+
+
+# §9.5: a second net behind the controller's try/finally, so an interpreter
+# exit that never reaches Controller.stop still lifts a synthetic button.
+atexit.register(release_all)

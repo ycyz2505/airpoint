@@ -10,6 +10,7 @@ import time
 from tkinter import TclError
 
 from . import cursorsize
+from . import inject
 from . import startup
 from . import updater
 from .config import Config
@@ -212,6 +213,9 @@ def main() -> None:
                 log("autostart registry update failed")
 
     controller = Controller(config, log, preview=PreviewBus())
+    # §9.5: a start of a fresh process may inherit a button left down by a
+    # crash, so clear it before the first frame instead of waiting for a click.
+    inject.release_all()
     controller.start()
     mouse_pause = MousePause(
         controller,

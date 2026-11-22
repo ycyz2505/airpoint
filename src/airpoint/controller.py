@@ -80,6 +80,8 @@ class Controller:
         self._blend_ms = 150.0
         self._diag = Diagnostics(1800)
         self._crash_backoff = 0.5
+        self._watchdog = None
+        self._pressed: dict[str, float] = {}
         self.personalizer = Personalizer()
 
     def start(self) -> None:
@@ -91,6 +93,37 @@ class Controller:
                 target=self._supervise, daemon=True, name="airpoint-controller"
             )
             self._thread.start()
+            self._watchdog = threading.Thread(
+                target=self._watch, daemon=True, name="airpoint-watchdog"
+            )
+            self._watchdog.start()
+
+    def _watch(self) -> None:
+        """§9.5: a 20 Hz guard that does not depend on the frame loop.
+
+        The frame loop already releases a held button after 5 s, but if the
+        camera stalls, a model throws or the loop is wedged, no frame runs and
+        a synthetic button would stay down. This thread only reads the clock
+        and the press timestamp, so it keeps working when nothing else does.
+        """
+        while not self._stop.wait(0.05):
+            if not self._pressed:
+                continue
+            now = time.time()
+            with self._lock:
+                stuck = [
+                    name for name, since in self._pressed.items()
+                    if now - since > 5.0
+                ]
+            if not stuck:
+                continue
+            self._release_all()
+            try:
+                self.log(
+                    f"watchdog released {', '.join(stuck)} held over 5 s"
+                )
+            except Exception:
+                pass
 
     def _supervise(self) -> None:
         """Keep the frame loop alive; a bad frame must not kill the service."""
@@ -100,7 +133,7 @@ class Controller:
                 self._run()
                 return
             except Exception as exc:
-                inject.release_all()
+                self._release_all()
                 crashes += 1
                 try:
                     self.log(f"frame loop crashed ({crashes}): {exc!r}")
@@ -123,11 +156,15 @@ class Controller:
         self._writing = False
         with self._lock:
             thread = self._thread
+            watchdog = self._watchdog
+            self._watchdog = None
         if thread is not None:
             thread.join(timeout=2.0)
+        if watchdog is not None:
+            watchdog.join(timeout=1.0)
         if self.recorder.active:
             self.recorder.stop()
-        inject.release_all()
+        self._release_all()
         if self._offset_dirty:
             try:
                 self.config.save()
@@ -209,7 +246,7 @@ class Controller:
         else:
             self._active.clear()
             self._writing = False
-            inject.release_all()
+            self._release_all()
             self.log("controller paused")
 
     def reload(self) -> None:
@@ -220,7 +257,7 @@ class Controller:
         if value:
             self._calibrating.set()
             self._reset.set()
-            inject.release_all()
+            self._release_all()
             self.log("calibration start")
         else:
             self._calibrating.clear()
@@ -235,7 +272,7 @@ class Controller:
         if self._recording.is_set() or self._calibrating.is_set():
             return
         self._active.clear()
-        inject.release_all()
+        self._release_all()
         self._reset.set()
         self._recording.set()
         self.log("recording requested")
@@ -346,6 +383,11 @@ class Controller:
         inject.wheel(-120 if landmarks[8][1] < landmarks[12][1] else 120)
         return True
 
+    def _release_all(self) -> None:
+        inject.release_all()
+        with self._lock:
+            self._pressed.clear()
+
     def _button(self, name: str, down: bool, now: float) -> None:
         """Send a button event, noting when Windows refused it.
 
@@ -354,6 +396,11 @@ class Controller:
         """
         if inject.button(name, down):
             self._inject_blocked = False
+            with self._lock:
+                if down:
+                    self._pressed[name] = time.time()
+                else:
+                    self._pressed.pop(name, None)
             return
         self._inject_blocked = True
         if now - self._blocked_log > 10.0:
@@ -536,7 +583,7 @@ class Controller:
                     self._paused_notice = True
                     self.log("perf paused: resource limit")
                     self.notice("性能不足，已暂停")
-                inject.release_all()
+                self._release_all()
                 self._active.clear()
                 self._writing = False
                 continue
@@ -694,7 +741,7 @@ class Controller:
                 pointer.reset()
                 absolute.reset()
                 gestures.reset()
-                inject.release_all()
+                self._release_all()
                 self._inside = False
                 self._blend_from = None
                 self._tier_name = tier_state.name
@@ -864,7 +911,7 @@ class Controller:
                     self._held_since = 0.0
 
                 if self._held_since and now - self._held_since > 5.0:
-                    inject.release_all()
+                    self._release_all()
                     gestures.cancel()
                     gestures.reset()
                     self._held_since = 0.0
@@ -1047,4 +1094,4 @@ class Controller:
         camera.close()
         pose.close()
         hands.close()
-        inject.release_all()
+        self._release_all()

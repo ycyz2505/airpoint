@@ -167,6 +167,9 @@ build is left untouched and the app starts from defaults.
 - Gesture press freezes the cursor: drag distance is measured from the hand, so
   a long press stays a right click instead of drifting into a drag.
 - Watchdog: a held button is released after 5 seconds even if the hand is lost.
+  The watchdog is its own 20 Hz thread, so it still fires when the camera
+  stalls or a model throws and no frame is running; `atexit` and a cleanup at
+  startup cover the crash cases where no thread survives.
 - Long-press ring: a small ring under the cursor fills while a press builds, so
   a right click is not a surprise; toggle with **长按进度环**.
 - Screen HUD: an optional click-through overlay draws the mapping box and a

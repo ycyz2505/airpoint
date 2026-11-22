@@ -1686,6 +1686,42 @@ class StatusLineTests(unittest.TestCase):
             controller.notice(str(index))
         self.assertEqual(len(controller._notices), 4)
 
+    def test_watchdog_releases_a_button_the_frame_loop_cannot(self):
+        import threading
+        import time as clock
+
+        from airpoint import controller as controller_module
+        from airpoint.controller import Controller
+
+        released = []
+        original = controller_module.inject.release_all
+        controller_module.inject.release_all = lambda: released.append(1)
+        try:
+            controller = Controller.__new__(Controller)
+            controller._lock = threading.Lock()
+            controller._stop = threading.Event()
+            controller._pressed = {"left": clock.time() - 6.0}
+            controller.log = lambda message: None
+            thread = threading.Thread(target=controller._watch, daemon=True)
+            thread.start()
+            for _ in range(40):
+                if released:
+                    break
+                clock.sleep(0.05)
+            self.assertEqual(released, [1])
+            self.assertEqual(controller._pressed, {})
+
+            # A fresh press is left alone, and the loop exits on stop().
+            released.clear()
+            controller._pressed = {"right": clock.time()}
+            clock.sleep(0.2)
+            self.assertEqual(released, [])
+            controller._stop.set()
+            thread.join(timeout=2.0)
+            self.assertFalse(thread.is_alive())
+        finally:
+            controller_module.inject.release_all = original
+
     def test_blend_is_a_no_op_without_a_tier_change(self):
         from airpoint.controller import Controller
 
