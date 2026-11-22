@@ -242,6 +242,8 @@ class ControlBar:
             text, color = "● 物理鼠标", "#ffb400"
         else:
             text, color = "● 暂停", "#ffb400"
+        if active and bool(getattr(self.controller, "hand_lost", False)):
+            text, color = "● 未看到手", "#ffb400"
         try:
             self._status.configure(text=text, fg=color)
             self._toggle.configure(text="暂停" if active else "激活")
@@ -439,6 +441,8 @@ class ScreenHud:
                 text = "● 物理鼠标"
             elif not active:
                 text = "● 暂停"
+            elif bool(getattr(self.controller, "hand_lost", False)):
+                text = "● 未看到手"
             elif bool(getattr(self.controller, "inject_blocked", False)):
                 text = "● 目标窗口提权，无法点击"
             if text != self._text:
@@ -503,6 +507,8 @@ def draw_status(frame, stats: dict) -> None:
 
     if stats.get("recording"):
         state = "REC"
+    elif stats.get("active") and stats.get("hand_lost"):
+        state = "NO HAND"
     elif stats.get("active"):
         state = "ACTIVE"
     elif stats.get("takeover"):
@@ -510,7 +516,9 @@ def draw_status(frame, stats: dict) -> None:
     else:
         state = "PAUSED"
     color = (80, 80, 255) if stats.get("recording") else (
-        (80, 220, 80) if stats.get("active") else (80, 190, 255)
+        (80, 220, 80)
+        if stats.get("active") and not stats.get("hand_lost")
+        else (80, 190, 255)
     )
     parts = [
         state,

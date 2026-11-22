@@ -70,6 +70,12 @@ build is left untouched and the app starts from defaults.
   higher on box position, recent activity and distance from the wrist
   (**多人锁定**, on by default). A short loss of the body reuses the last
   result for 1 second, marked stale.
+- Hand-loss fallback: the cursor never jumps. If the hand model misses the
+  palm, the last palm is kept for five frames before the pose wrist takes
+  over; if the wrist is gone too, the cursor freezes where it is rather than
+  snapping to zero, buttons are released after 300 ms, and the HUD, tray line
+  and preview strip say `未看到手` / `NO HAND`. One fresh frame brings the
+  cursor back — no re-activation needed.
 - Relative cursor with One Euro smoothing and short prediction.
 - Tray toggle; `Ctrl+Alt+Shift+F9` toggle, `Ctrl+Alt+Shift+F10` cycle mode,
   `Ctrl+Alt+Shift+F8` control bar, `F12` emergency stop.

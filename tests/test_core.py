@@ -1722,6 +1722,60 @@ class MousePauseTests(unittest.TestCase):
         self.assertNotIn(mousehook.WM_MOUSEMOVE, mousehook._CONFIRM_MESSAGES)
 
 
+class HandFallbackTests(unittest.TestCase):
+    """§5.4: palm -> held palm -> wrist -> frozen -> paused."""
+
+    def _make(self):
+        from airpoint.fallback import HandFallback
+
+        return HandFallback()
+
+    def test_a_palm_is_used_as_given(self):
+        fallback = self._make()
+        point, lost = fallback.update((0.4, 0.6), (0.35, 0.62), 100.0)
+        self.assertEqual(point, (0.4, 0.6))
+        self.assertFalse(lost)
+
+    def test_a_missing_palm_holds_the_last_one_for_a_few_frames(self):
+        fallback = self._make()
+        fallback.update((0.4, 0.6), (0.35, 0.62), 100.0)
+        for step in range(1, 6):
+            point, lost = fallback.update(None, (0.9, 0.9), 100.0 + step * 0.03)
+            self.assertEqual(point, (0.4, 0.6))
+            self.assertFalse(lost)
+
+    def test_the_wrist_takes_over_after_the_hold(self):
+        fallback = self._make()
+        fallback.update((0.4, 0.6), (0.35, 0.62), 100.0)
+        for step in range(1, 7):
+            point, _ = fallback.update(None, (0.9, 0.9), 100.0 + step * 0.03)
+        self.assertEqual(point, (0.9, 0.9))
+
+    def test_without_a_wrist_the_cursor_freezes_then_pauses(self):
+        fallback = self._make()
+        fallback.update((0.4, 0.6), (0.35, 0.62), 100.0)
+        point, lost = fallback.update(None, None, 100.1)
+        self.assertIsNone(point)
+        self.assertFalse(lost)
+        point, lost = fallback.update(None, None, 100.4)
+        self.assertIsNone(point)
+        self.assertTrue(lost)
+
+    def test_one_fresh_frame_clears_the_loss(self):
+        fallback = self._make()
+        fallback.update((0.4, 0.6), (0.35, 0.62), 100.0)
+        self.assertTrue(fallback.update(None, None, 100.5)[1])
+        point, lost = fallback.update((0.5, 0.5), (0.45, 0.5), 100.6)
+        self.assertEqual(point, (0.5, 0.5))
+        self.assertFalse(lost)
+
+    def test_nothing_seen_yet_is_not_a_loss(self):
+        fallback = self._make()
+        point, lost = fallback.update(None, None, 100.0)
+        self.assertIsNone(point)
+        self.assertFalse(lost)
+
+
 class StatusLineTests(unittest.TestCase):
     def test_capability_strip_is_drawn(self):
         import numpy as np

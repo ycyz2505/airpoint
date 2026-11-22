@@ -11,6 +11,7 @@ import cv2
 from . import inject
 from .capture import Camera, limit_for_level
 from .diagnostics import Diagnostics
+from .fallback import HandFallback
 from .gestures import GestureEngine, TwoHandOpen
 from .hands import HandTracker
 from .paths import log_dir
@@ -69,6 +70,8 @@ class Controller:
         self._paused_notice = False
         self._writing = False
         self._two_hand = TwoHandOpen(config)
+        self._fallback = HandFallback()
+        self._hand_lost = False
         self._bar_request = 0
         self._notices = []
         self._inject_blocked = False
@@ -198,6 +201,11 @@ class Controller:
         self._mouse_takeover = bool(value)
 
     @property
+    def hand_lost(self) -> bool:
+        """True while §5.4 has frozen the cursor for want of a hand."""
+        return self._hand_lost
+
+    @property
     def tier(self) -> str:
         return self._tier.current
 
@@ -211,6 +219,8 @@ class Controller:
             state = "录制中"
         elif self._mouse_takeover:
             state = "物理鼠标"
+        elif self._hand_lost:
+            state = "未看到手"
         score = capability(
             self._last_palm_px, self._tier.drop, self.config
         )
@@ -482,6 +492,8 @@ class Controller:
                 self._held_since = 0.0
                 self._hold_progress = 0.0
                 self._paused_notice = False
+                self._fallback.reset()
+                self._hand_lost = False
                 self._window_start = time.time()
 
             if not camera.opened:
@@ -715,14 +727,31 @@ class Controller:
                     last_click_result = None
 
             point = None
-            if wrist is not None:
-                point = (wrist[0], wrist[1])
-                if moving_result and moving_result.get("landmarks"):
-                    lm = moving_result["landmarks"]
-                    point = (
-                        sum(lm[i][0] for i in (0, 5, 9, 13, 17)) / 5.0,
-                        sum(lm[i][1] for i in (0, 5, 9, 13, 17)) / 5.0,
-                    )
+            palm = None
+            if moving_result and moving_result.get("landmarks"):
+                lm = moving_result["landmarks"]
+                palm = (
+                    sum(lm[i][0] for i in (0, 5, 9, 13, 17)) / 5.0,
+                    sum(lm[i][1] for i in (0, 5, 9, 13, 17)) / 5.0,
+                )
+            # §5.4: palm -> held palm -> wrist -> frozen -> paused. A stale
+            # pose hold-over is not a fresh wrist, so it is not offered here.
+            point, lost = self._fallback.update(
+                palm, None if pose.stale else wrist, now
+            )
+            if lost != self._hand_lost:
+                self._hand_lost = lost
+                if lost:
+                    self.log("hand lost: cursor frozen, pausing")
+                    self._release_all()
+                    cancel = gestures.cancel()
+                    if cancel.left_up:
+                        inject.button("left", False)
+                    self._held_since = 0.0
+                    self._hold_progress = 0.0
+                    self._writing = False
+                else:
+                    self.log("hand back: cursor resumes")
 
             if (
                 self._active.is_set()
@@ -750,6 +779,8 @@ class Controller:
                 self._release_all()
                 self._inside = False
                 self._blend_from = None
+                self._fallback.reset()
+                self._hand_lost = False
                 self._tier_name = tier_state.name
             elif tier_state.name != self._tier_name:
                 if self._tier_name and mode == "absolute":
@@ -999,6 +1030,7 @@ class Controller:
                         "palm_px": self._last_palm_px,
                         "drop": drop,
                         "takeover": self._mouse_takeover,
+                        "hand_lost": self._hand_lost,
                         "presentation": bool(
                             self.config.get("overlay.presentation", False)
                         ),
